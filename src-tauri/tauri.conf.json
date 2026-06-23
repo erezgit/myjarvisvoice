@@ -14,10 +14,11 @@
     "windows": [
       {
         "title": "My Jarvis Voice",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 320,
-        "minHeight": 400,
+        "width": 440,
+        "height": 820,
+        "minWidth": 380,
+        "minHeight": 520,
+        "maxWidth": 560,
         "transparent": true,
         "decorations": true
       }

@@ -331,21 +331,6 @@ app.get("/api/voice_messages", (req, res) => {
 });
 
 // =====================
-// Live calls — disabled in the open-source local build.
-// The original cloud app used LiveKit for real-time voice; this fork is
-// fully offline and ships only the local Kokoro TTS path. Endpoint kept so
-// the UI degrades gracefully instead of 404-ing.
-// =====================
-app.post("/api/livekit-token", (_req, res) => {
-  res.status(501).json({
-    error: "live_calls_disabled",
-    message:
-      "Real-time live calls are disabled in My Jarvis Voice (offline build). " +
-      "Use the local Kokoro voice feed instead.",
-  });
-});
-
-// =====================
 // Local voice engine proxy — lets the UI manage the model download and
 // check readiness over same-origin, without knowing the engine's port.
 // =====================

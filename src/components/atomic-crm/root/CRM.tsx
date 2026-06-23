@@ -41,8 +41,6 @@ import { MemoryPage } from "../kb/MemoryPage";
 import { RoadmapPage } from "../kb/RoadmapPage";
 import { AutomationsPage } from "../automations/AutomationsPage";
 import { ActionItemsPage } from "../action-items/ActionItemsPage";
-import { MeetingsPage } from "../meetings/MeetingsPage";
-import { MeetingDetailPage } from "../meetings/MeetingDetailPage";
 import { ComponentLibraryPage } from "../kb/ComponentLibraryPage";
 import { KnowledgeBasePage } from "../kb/KnowledgeBasePage";
 import { QALogPage } from "../qa-log/QALogPage";
@@ -225,8 +223,6 @@ const DesktopAdmin = (props: CoreAdminProps) => {
       </CustomRoutes>
 
       <CustomRoutes>
-        <Route path={MeetingsPage.path} element={<MeetingsPage />} />
-        <Route path={MeetingDetailPage.path} element={<MeetingDetailPage />} />
         <Route path={MemoryPage.path} element={<MemoryPage />} />
         <Route path={RoadmapPage.path} element={<RoadmapPage />} />
         <Route path={SettingsPage.path} element={<SettingsPage />} />

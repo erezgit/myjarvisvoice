@@ -54,8 +54,14 @@ Open **http://localhost:1420**. On first launch the feed shows a
 when it flips to **ready**, voice works. The model is cached in your app data
 dir and persists across restarts.
 
-Then: pick an agent/voice in **Settings**, type into the panel at the top of the
-feed, hit **Speak**, and hear Kokoro locally.
+The app is a compact, single-window **voice feed** (Open-Whisper style): the
+body shows today's spoken messages, and a slim bottom bar has three controls —
+**Home**, **Likes**, and **Settings**. Open **Settings** to pick and **preview**
+any local voice (tap the play button on each). To make the Mac speak custom
+text, POST to the local engine — see **The local voice API** below, or the
+one-command version in [`AGENTS.md`](./AGENTS.md). Messages an agent sends
+through `POST /api/voice` appear as new cards in the feed and are playable
+inline.
 
 ### Run pieces individually
 
