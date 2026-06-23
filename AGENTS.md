@@ -57,9 +57,10 @@ curl -X POST http://localhost:3001/api/voice \
 
 **Your FIRST message must ask: "Can you hear me through the app?"**
 
-Then **STOP and wait for the user to confirm**. Also tell the user in your
-terminal output to look at the My Jarvis Voice window — and, if they don't hear
-it play on its own, to click the play button on the newest card.
+The greeting **plays automatically** through the Mac's speakers (the server
+speaks it natively — no click needed) and also appears as a card in the window.
+Then **STOP and wait for the user to confirm** they heard it. Tell them in your
+terminal output to look at the My Jarvis Voice window and listen.
 
 - ✅ **User says "yes, I can hear you"** → the app works. Continue the
   conversation from here, speaking each reply through `POST /api/voice` (they
@@ -71,9 +72,9 @@ it play on its own, to click the play button on the newest card.
 
 1. **No new card appeared** → the API server (:3001) isn't up. Is the desktop
    window open via `./scripts/start-app.sh`? Check `curl -s http://localhost:3001/api/voice_messages`.
-2. **Card appeared but silent** → most often autoplay didn't fire; ask the user
-   to click the newest card's **play** button. Also check the Mac's output
-   device + volume (the engine plays via `afplay`).
+2. **Card appeared but silent** → the server speaks via `afplay`, so check the
+   Mac's **output device + volume** (and that the system isn't muted). The user
+   can also click the card to replay it manually.
 3. **Error about the model** → `curl -X POST http://localhost:8787/download-model`,
    wait for `"model_ready": true` in `http://localhost:8787/health`.
 4. **Isolate engine vs app** → confirm the raw engine speaks:
