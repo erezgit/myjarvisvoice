@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Heart, Copy, Download, Mic } from "lucide-react";
 import { VoicePlayerInline } from "./VoicePlayerInline";
 import { UnlikeConfirm } from "./UnlikeConfirm";
@@ -40,11 +40,9 @@ function ExpandableText({ text }: { text: string }) {
 export function VoicePalPage() {
   const [messages, setMessages] = useState<VoiceMessage[]>([]);
   const [unlikeId, setUnlikeId] = useState<number | null>(null);
-  const [autoPlayId, setAutoPlayId] = useState<number | null>(null);
   const [voiceUnlocked, setVoiceUnlocked] = useState(() =>
     localStorage.getItem("audio-unlocked") === "true"
   );
-  const latestIdRef = useRef<number>(0);
 
   const handleStartVoice = () => {
     // This click event will trigger audioManager's unlock listener
@@ -54,29 +52,22 @@ export function VoicePalPage() {
     setVoiceUnlocked(true);
   };
 
-  const fetchMessages = (isInitial = false) => {
+  // Automatic playback is handled natively by the server (it plays each new
+  // message through the Mac's speakers the moment it's synthesized). The UI only
+  // needs to keep the feed in sync; the inline player is for manual replay.
+  const fetchMessages = () => {
     fetch("http://localhost:3001/api/voice_messages")
       .then((r) => r.json())
-      .then((msgs: VoiceMessage[]) => {
-        if (msgs.length > 0) {
-          if (isInitial) {
-            latestIdRef.current = msgs[0].id;
-          } else if (msgs[0].id > latestIdRef.current) {
-            latestIdRef.current = msgs[0].id;
-            setAutoPlayId(msgs[0].id);
-          }
-        }
-        setMessages(msgs);
-      })
+      .then((msgs: VoiceMessage[]) => setMessages(msgs))
       .catch(console.error);
   };
 
   useEffect(() => {
-    fetchMessages(true);
+    fetchMessages();
     const es = new EventSource("http://localhost:3001/api/events");
     es.onmessage = (e) => {
       const data = JSON.parse(e.data);
-      if (data.resource === "voice_messages") fetchMessages(false);
+      if (data.resource === "voice_messages") fetchMessages();
     };
     return () => es.close();
   }, []);
@@ -203,7 +194,7 @@ export function VoicePalPage() {
             <ExpandableText text={msg.message} />
 
             {/* Player */}
-            <VoicePlayerInline audioUrl={`http://localhost:3001${msg.audio_path}`} autoPlay={msg.id === autoPlayId} />
+            <VoicePlayerInline audioUrl={`http://localhost:3001${msg.audio_path}`} />
           </div>
         ))}
 
