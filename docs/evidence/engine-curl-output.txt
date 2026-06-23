@@ -1,0 +1,27 @@
+# My Jarvis Voice — local engine test evidence
+Date: יום ג׳ יוני 23 2026 23:09:57 IDT
+
+## GET /health
+{"status": "ok", "model_ready": true, "port": 8787, "model_dir": "/Users/erezfern/kokoro-tts", "voices": ["am_echo", "am_onyx", "bm_fable", "af_nova"]}
+
+## GET /voices
+{"voices": [{"id": "am_echo", "label": "Jarvis", "agent": "jarvis", "alias": "echo"}, {"id": "am_onyx", "label": "Atlas", "agent": "atlas", "alias": "onyx"}, {"id": "bm_fable", "label": "Ben", "agent": "ben", "alias": "fable"}, {"id": "af_nova", "label": "Nova", "agent": "nova", "alias": "nova"}]}
+
+## POST /synthesize  (am_onyx) -> wav
+$ curl -X POST :8787/synthesize -d {"text":"...","voice":"am_onyx"} -o out.wav
+/tmp/mjv-synth.wav: RIFF (little-endian) data, WAVE audio, Microsoft PCM, 16 bit, mono 24000 Hz
+
+## POST /speak  (am_echo) -> plays on speakers
+$ curl -X POST :8787/speak -d {"text":"Hello from the open source app...","voice":"am_echo"}
+{"ok": true, "voice": "am_echo", "bytes": 278572}
+
+## POST /speak  (alias nova, speed 1.1)
+{"ok": true, "voice": "af_nova", "bytes": 106540}
+
+## First-run model download flow (against empty model dir)
+GET /health  -> {"model_ready": false, ...}
+POST /download-model -> {"started": true}
+GET /download-progress @4s -> {"downloading":true,"downloaded":2097152,"total":353746785,"files":{"kokoro-v1.0.onnx":2097152}}
+GET /download-progress @9s -> {"downloading":true,"downloaded":5242880,"total":353746785}
+on disk: kokoro-v1.0.onnx.part (atomic .part -> rename on completion)
+(download cancelled after proving progress to avoid re-fetching 350MB already present locally)

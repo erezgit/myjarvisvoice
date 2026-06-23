@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>My Jarvis needs microphone access to enable voice conversations with the AI agent.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>My Jarvis may use the camera for future video features.</string>
+</dict>
+</plist>

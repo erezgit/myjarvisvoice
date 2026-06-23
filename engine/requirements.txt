@@ -1,0 +1,5 @@
+# My Jarvis Voice — local Kokoro engine deps
+# Python 3.10–3.12 recommended (kokoro_onnx / onnxruntime wheels).
+kokoro-onnx>=0.4.0
+soundfile>=0.12.1
+numpy>=1.26

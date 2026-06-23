@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+dist-ssr/
+build/
+out/
+src-tauri/target/
+src-tauri/gen/
+
+# Model files — downloaded at runtime, NEVER commit (Apache-2.0 weights, ~350 MB)
+*.onnx
+*.bin
+models/
+
+# Python engine
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Local data / generated audio
+data/
+*.wav
+*.mp3
+!docs/evidence/*.wav
+
+# Environment & secrets — never commit
+.env
+.env.*
+!.env.example
+*.local
+config.env
+
+# Logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# Tauri signing / Claude config
+.claude
+.claude.json*
+*.tsbuildinfo
