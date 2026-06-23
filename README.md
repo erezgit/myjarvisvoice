@@ -31,9 +31,14 @@ Everything talks locally:
 
 ---
 
-## Quick start (dev)
+## Quick start — the desktop app
 
-Requirements: **Node 18+**, **Python 3.10–3.12**, macOS (uses `afplay`; Linux works with `aplay`/`ffplay`).
+> **My Jarvis Voice is a native desktop app. Run it as the app — not in a
+> browser.** `http://localhost:1420` is an internal dev URL the desktop shell
+> loads from; it is not the product. The product is the **native window**.
+
+Requirements: **Node 18+**, **Python 3.10–3.12**, **Rust toolchain (`cargo`)**
+for the desktop shell, macOS (the engine plays via `afplay`).
 
 ```bash
 git clone https://github.com/erezgit/myjarvisvoice.git
@@ -42,58 +47,34 @@ cd myjarvisvoice
 # 1. JS deps
 npm install
 
-# 2. Python voice engine (creates engine/.venv and installs kokoro-onnx)
+# 2. Python voice engine (creates engine/.venv, auto-picks a 3.10–3.12 python)
 ./engine/setup.sh
 
-# 3. Start everything (engine + server + frontend)
-./scripts/start-dev.sh
+# 3. Download the voice model once (~350 MB)
+engine/.venv/bin/python engine/kokoro_server.py --port 8787 &
+curl -X POST http://localhost:8787/download-model
+until curl -s http://localhost:8787/health | grep -q '"model_ready": true'; do sleep 3; done
+kill %1 2>/dev/null || true
+
+# 4. Launch the DESKTOP APP (first run compiles the Rust shell, ~2–5 min)
+./scripts/start-app.sh
 ```
 
-Open **http://localhost:1420**. On first launch the feed shows a
-**“Download model (~350 MB)”** button — click it, watch the progress bar, and
-when it flips to **ready**, voice works. The model is cached in your app data
-dir and persists across restarts.
+`./scripts/start-app.sh` starts the engine (:8787) + API server (:3001) and
+opens the **native window**. (No Rust? Install it:
+`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`.)
 
 The app is a compact, single-window **voice feed** (Open-Whisper style): the
 body shows today's spoken messages, and a slim bottom bar has three controls —
 **Home**, **Likes**, and **Settings**. Open **Settings** to pick and **preview**
-any local voice (tap the play button on each). To make the Mac speak custom
-text, POST to the local engine — see **The local voice API** below, or the
-one-command version in [`AGENTS.md`](./AGENTS.md). Messages an agent sends
-through `POST /api/voice` appear as new cards in the feed and are playable
-inline.
+any local voice. To make the app speak, an agent or script POSTs to
+`http://localhost:3001/api/voice` (`{ "message", "voice"?, "agent"? }`) — the
+message appears as a new card and plays. The one-command agent flow is in
+[`AGENTS.md`](./AGENTS.md).
 
-### Run pieces individually
-
-```bash
-# voice engine only (the agent API)
-engine/.venv/bin/python engine/kokoro_server.py --port 8787
-
-# app server only
-npm run dev:server     # API on :3001
-
-# frontend only
-npm run dev            # Vite on :1420
-```
-
-### Native desktop shell (optional / experimental)
-
-The Tauri 2 shell (`src-tauri/`) is included for packaging into a native
-`.app`/`.dmg`. To run it in dev, start the engine + server first, then launch
-the window:
-
-```bash
-# terminal 1 — engine + API server
-engine/.venv/bin/python engine/kokoro_server.py --port 8787 &
-npm run dev:server
-
-# terminal 2 — native window (runs Vite itself)
-npm run tauri dev
-```
-
-> Note: packaging a fully self‑contained `.dmg` that bundles the Python engine
-> is not wired up yet — the **dev stack (`./scripts/start-dev.sh`) is the
-> supported, recommended way to run**, and is the path agents should use.
+> **Coding agents:** read [`AGENTS.md`](./AGENTS.md) — it tells you to launch the
+> desktop app and start a voice conversation with the user (beginning with a
+> "can you hear me?" handshake), never to open a browser.
 
 ---
 
