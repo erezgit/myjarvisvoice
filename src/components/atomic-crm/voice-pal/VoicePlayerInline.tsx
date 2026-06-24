@@ -5,6 +5,7 @@ import { audioManager } from "./audioManager";
 
 interface VoicePlayerInlineProps {
   audioUrl: string;
+  /** When true, this message auto-plays once (the newest arrival). */
   autoPlay?: boolean;
 }
 
@@ -28,7 +29,7 @@ function markPlayed(url: string) {
 
 const SPEEDS = [1, 1.25, 1.5];
 
-// Track which URLs have been auto-played to prevent replay on re-render
+// URLs already auto-played this session — prevents a re-render from replaying.
 const autoPlayedUrls = new Set<string>();
 
 export function VoicePlayerInline({ audioUrl, autoPlay }: VoicePlayerInlineProps) {
@@ -38,36 +39,32 @@ export function VoicePlayerInline({ audioUrl, autoPlay }: VoicePlayerInlineProps
   const [duration, setDuration] = useState(0);
   const [speedIndex, setSpeedIndex] = useState(0);
 
-  // Determine if we should auto-play this instance
-  const shouldAutoPlay = autoPlay && !autoPlayedUrls.has(audioUrl);
-
-  // Mark as played immediately to prevent re-triggers
-  if (shouldAutoPlay) {
-    autoPlayedUrls.add(audioUrl);
-  }
-
-  // Auto-play via the shared audioManager (unlocked by user's first click)
+  // Auto-play the newest message through the shared player. This single playback
+  // produces the sound AND drives the progress bar below — one source of truth.
   useEffect(() => {
-    if (!shouldAutoPlay) return;
+    if (!autoPlay || autoPlayedUrls.has(audioUrl)) return;
+    autoPlayedUrls.add(audioUrl);
     audioManager.play(audioUrl);
     markPlayed(audioUrl);
     setIsNew(false);
-  }, [shouldAutoPlay, audioUrl]);
+  }, [autoPlay, audioUrl]);
 
-  // Subscribe to audioManager state changes for this URL
+  // Reflect the shared player's state for this URL.
   useEffect(() => {
-    const unsub = audioManager.subscribe(() => {
+    const sync = () => {
       const playing = audioManager.isPlayingSrc(audioUrl);
       setIsPlaying(playing);
-      if (playing) {
+      if (audioManager.getCurrentSrc().endsWith(audioUrl)) {
         setCurrentTime(audioManager.getCurrentTime());
         setDuration(audioManager.getDuration());
       }
-    });
+    };
+    const unsub = audioManager.subscribe(sync);
+    sync();
     return unsub;
   }, [audioUrl]);
 
-  // rAF progress tracking when this URL is playing
+  // Smooth progress while this URL is playing.
   useEffect(() => {
     let raf: number;
     const update = () => {

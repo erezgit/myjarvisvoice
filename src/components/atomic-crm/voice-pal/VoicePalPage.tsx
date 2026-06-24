@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Heart, Copy, Download, Mic } from "lucide-react";
 import { VoicePlayerInline } from "./VoicePlayerInline";
 import { UnlikeConfirm } from "./UnlikeConfirm";
 import { ModelDownloadBanner } from "./ModelDownloadBanner";
-import { audioManager } from "./audioManager";
 
 type VoiceMessage = {
   id: number;
@@ -40,34 +39,34 @@ function ExpandableText({ text }: { text: string }) {
 export function VoicePalPage() {
   const [messages, setMessages] = useState<VoiceMessage[]>([]);
   const [unlikeId, setUnlikeId] = useState<number | null>(null);
-  const [voiceUnlocked, setVoiceUnlocked] = useState(() =>
-    localStorage.getItem("audio-unlocked") === "true"
-  );
+  const [autoPlayId, setAutoPlayId] = useState<number | null>(null);
+  const latestIdRef = useRef<number>(0);
 
-  const handleStartVoice = () => {
-    // This click event will trigger audioManager's unlock listener
-    audioManager.play(""); // silent unlock
-    audioManager.pause();
-    localStorage.setItem("audio-unlocked", "true");
-    setVoiceUnlocked(true);
-  };
-
-  // Automatic playback is handled natively by the server (it plays each new
-  // message through the Mac's speakers the moment it's synthesized). The UI only
-  // needs to keep the feed in sync; the inline player is for manual replay.
-  const fetchMessages = () => {
+  // The player is the single source of truth: when a NEW message arrives we flag
+  // it so the inline player auto-plays it (sound + progress bar together).
+  const fetchMessages = (isInitial = false) => {
     fetch("http://localhost:3001/api/voice_messages")
       .then((r) => r.json())
-      .then((msgs: VoiceMessage[]) => setMessages(msgs))
+      .then((msgs: VoiceMessage[]) => {
+        if (msgs.length > 0) {
+          if (isInitial) {
+            latestIdRef.current = msgs[0].id;
+          } else if (msgs[0].id > latestIdRef.current) {
+            latestIdRef.current = msgs[0].id;
+            setAutoPlayId(msgs[0].id);
+          }
+        }
+        setMessages(msgs);
+      })
       .catch(console.error);
   };
 
   useEffect(() => {
-    fetchMessages();
+    fetchMessages(true);
     const es = new EventSource("http://localhost:3001/api/events");
     es.onmessage = (e) => {
       const data = JSON.parse(e.data);
-      if (data.resource === "voice_messages") fetchMessages();
+      if (data.resource === "voice_messages") fetchMessages(false);
     };
     return () => es.close();
   }, []);
@@ -99,32 +98,6 @@ export function VoicePalPage() {
     const d = new Date(msg.created_at + "Z");
     return d.toDateString() === today.toDateString();
   });
-
-  if (!voiceUnlocked) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center bg-white">
-        <div className="text-center space-y-6">
-          <div className="w-20 h-20 rounded-full bg-[#58a6ff]/10 flex items-center justify-center mx-auto">
-            <Mic className="w-10 h-10 text-[#58a6ff]" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-[#1a1a1a]" style={{ fontFamily: '"SF Pro Rounded", "Nunito", system-ui, sans-serif' }}>
-              My Jarvis Voice
-            </h1>
-            <p className="text-sm text-[#999] mt-2">
-              Tap below to enable voice playback
-            </p>
-          </div>
-          <button
-            onClick={handleStartVoice}
-            className="px-8 py-3 rounded-full bg-[#58a6ff] text-white font-medium text-sm hover:bg-[#4090e0] transition-colors shadow-lg shadow-[#58a6ff]/25"
-          >
-            Start Voice
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-full flex-col bg-white">
@@ -193,8 +166,8 @@ export function VoicePalPage() {
             {/* Message text */}
             <ExpandableText text={msg.message} />
 
-            {/* Player */}
-            <VoicePlayerInline audioUrl={`http://localhost:3001${msg.audio_path}`} />
+            {/* Player — single source of truth for sound + progress */}
+            <VoicePlayerInline audioUrl={`http://localhost:3001${msg.audio_path}`} autoPlay={msg.id === autoPlayId} />
           </div>
         ))}
 

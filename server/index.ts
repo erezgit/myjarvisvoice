@@ -60,7 +60,7 @@ function loadServerConfig(): void {
 }
 
 loadServerConfig();
-import { exec, spawn } from "child_process";
+import { exec } from "child_process";
 import db, { initSchema } from "./db.js";
 import { parseFilters } from "./filters.js";
 
@@ -262,31 +262,9 @@ try { db.exec(`ALTER TABLE voice_messages ADD COLUMN liked INTEGER DEFAULT 0`); 
 // Add agent column if missing (migration for existing DBs)
 try { db.exec(`ALTER TABLE voice_messages ADD COLUMN agent TEXT DEFAULT NULL`); } catch {};
 
-// ── Native audio playback ──────────────────────────────────────────────────
-// A desktop voice assistant must SPEAK on its own. Playing in the WebView is
-// unreliable: WebKit blocks programmatic audio.play() until the page has seen a
-// real user gesture in the session, so assistant-initiated messages arrive
-// silently until the user clicks. Instead we play the synthesized WAV through
-// the OS audio output, server-side — deterministic and gesture-independent.
-// Playback is serialized so consecutive messages don't talk over each other.
-let playbackChain: Promise<void> = Promise.resolve();
-function playAudioFile(filepath: string): void {
-  playbackChain = playbackChain
-    .then(
-      () =>
-        new Promise<void>((resolve) => {
-          let cmd: string;
-          if (process.platform === "darwin") cmd = "afplay";
-          else if (process.platform === "linux") cmd = "aplay";
-          else return resolve(); // unsupported platform — skip native playback
-          const proc = spawn(cmd, [filepath], { stdio: "ignore" });
-          proc.on("error", () => resolve()); // player missing — keep the chain alive
-          proc.on("exit", () => resolve());
-        }),
-    )
-    .catch(() => {});
-}
-
+// Synthesize a message, persist it, and notify the UI. The app's player is the
+// single source of truth for playback: it auto-plays new messages and animates
+// its own progress bar (the WebView allows autoplay — no server-side audio).
 app.post("/api/voice", async (req, res) => {
   const { message, voice = "am_echo", agent = null, speed = 1.0 } = req.body;
   if (!message) return res.status(400).json({ error: "message required" });
@@ -305,12 +283,7 @@ app.post("/api/voice", async (req, res) => {
     const stmt = db.prepare("INSERT INTO voice_messages (message, voice, audio_path, agent) VALUES (?, ?, ?, ?)");
     const result = stmt.run(message, voice, `/voice/${filename}`, agent);
 
-    // Speak immediately through the Mac's audio output. This is the automatic
-    // playback — gesture-independent, unlike the WebView. The broadcast below
-    // just refreshes the feed UI; the in-app player is for manual replay.
-    playAudioFile(filepath);
-
-    // Broadcast to UI so the new message appears in the feed.
+    // Notify the UI; the app's player picks up the new message and auto-plays it.
     broadcast("voice_messages");
 
     res.json({ id: result.lastInsertRowid, message, voice, agent, audio_path: `/voice/${filename}` });
