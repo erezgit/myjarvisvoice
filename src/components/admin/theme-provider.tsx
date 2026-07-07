@@ -27,17 +27,20 @@ export function ThemeProvider({
 
     root.classList.remove("light", "dark");
 
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light";
+    const applied =
+      theme === "system"
+        ? window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light"
+        : theme;
 
-      root.classList.add(systemTheme);
-      return;
-    }
+    root.classList.add(applied);
 
-    root.classList.add(theme);
+    // Drive the NATIVE window chrome (macOS title bar) so it matches the app
+    // theme instead of staying light. Uses the global Tauri API (withGlobalTauri);
+    // no-op in a plain browser / non-Tauri dev context.
+    const tauri = (window as unknown as { __TAURI__?: any }).__TAURI__;
+    tauri?.window?.getCurrentWindow?.().setTheme?.(applied).catch(() => {});
   }, [theme]);
 
   const value = {

@@ -20,7 +20,8 @@
         "minHeight": 520,
         "maxWidth": 560,
         "transparent": true,
-        "decorations": true
+        "decorations": true,
+        "theme": "Dark"
       }
     ],
     "withGlobalTauri": true,
