@@ -59,7 +59,7 @@ const BottomBar = () => {
   const go = (target: string, active: boolean) =>
     navigate(active ? "/voice-pal" : target);
   return (
-    <div className="shrink-0 flex items-center justify-end gap-2 border-t border-gray-100 bg-white/80 px-4 py-2.5 backdrop-blur">
+    <div className="shrink-0 flex items-center justify-end gap-2 border-t border-border bg-background/80 px-4 py-2.5 backdrop-blur">
       <button
         type="button"
         aria-label="Home"
@@ -67,8 +67,8 @@ const BottomBar = () => {
         onClick={() => navigate("/voice-pal")}
         className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
           onHome
-            ? "border-blue-200 bg-blue-50 text-blue-600"
-            : "border-gray-200 text-gray-500 hover:bg-gray-50"
+            ? "border-blue-500/30 bg-blue-500/10 text-blue-500"
+            : "border-border text-muted-foreground hover:bg-muted"
         }`}
       >
         <Home className="h-4 w-4" />
@@ -80,8 +80,8 @@ const BottomBar = () => {
         onClick={() => go("/voice-pal/likes", onLikes)}
         className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
           onLikes
-            ? "border-red-200 bg-red-50 text-red-500"
-            : "border-gray-200 text-gray-500 hover:bg-gray-50"
+            ? "border-red-500/30 bg-red-500/10 text-red-500"
+            : "border-border text-muted-foreground hover:bg-muted"
         }`}
       >
         <Heart className={`h-4 w-4 ${onLikes ? "fill-current" : ""}`} />
@@ -93,8 +93,8 @@ const BottomBar = () => {
         onClick={() => go("/voice-pal/voices", onVoices)}
         className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
           onVoices
-            ? "border-gray-300 bg-gray-100 text-gray-700"
-            : "border-gray-200 text-gray-500 hover:bg-gray-50"
+            ? "border-border bg-muted text-foreground"
+            : "border-border text-muted-foreground hover:bg-muted"
         }`}
       >
         <SettingsIcon className="h-4 w-4" />

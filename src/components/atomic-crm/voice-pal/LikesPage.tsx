@@ -52,13 +52,13 @@ export function LikesPage() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className="shrink-0 px-10 pt-8 pb-4">
-        <h1 className="text-2xl font-semibold text-[#1a1a1a]" style={{ fontFamily: '"Nunito", "SF Pro Rounded", system-ui, sans-serif' }}>
+        <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: '"Nunito", "SF Pro Rounded", system-ui, sans-serif' }}>
           Liked Messages
         </h1>
-        <p className="text-sm text-[#999] mt-1">{messages.length} favorites</p>
+        <p className="text-sm text-muted-foreground mt-1">{messages.length} favorites</p>
       </div>
 
       {/* Banner */}
@@ -91,13 +91,13 @@ export function LikesPage() {
               className="flex items-start gap-5 py-3.5 px-4 -mx-4 rounded-xl hover:bg-black/[0.02] transition-colors group"
             >
               {/* Time */}
-              <span className="text-sm text-[#999] w-20 shrink-0 tabular-nums pt-0.5">
+              <span className="text-sm text-muted-foreground w-20 shrink-0 tabular-nums pt-0.5">
                 {formatTime(msg.created_at)}
               </span>
 
               {/* Content: text + player */}
               <div className="flex-1 min-w-0 space-y-2">
-                <p className="text-sm text-[#1a1a1a] leading-relaxed">
+                <p className="text-sm text-foreground leading-relaxed">
                   {msg.message}
                 </p>
                 <VoicePlayerInline audioUrl={`http://localhost:3001${msg.audio_path}`} />
@@ -107,7 +107,7 @@ export function LikesPage() {
               <div className="flex items-center gap-1 shrink-0 pt-0.5 opacity-100">
                 <button
                   onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(msg.message); }}
-                  className="p-1.5 rounded-md hover:bg-black/5 text-[#999] hover:text-[#666] transition-colors"
+                  className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <Copy className="w-4 h-4" />
                 </button>
@@ -115,7 +115,7 @@ export function LikesPage() {
                   href={`http://localhost:3001${msg.audio_path}`}
                   download
                   onClick={(e) => e.stopPropagation()}
-                  className="p-1.5 rounded-md hover:bg-black/5 text-[#999] hover:text-[#666] transition-colors"
+                  className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <Download className="w-4 h-4" />
                 </a>
@@ -133,8 +133,8 @@ export function LikesPage() {
         {messages.length === 0 && (
           <div className="text-center py-20">
             <div className="text-4xl mb-3">❤️</div>
-            <p className="text-sm text-[#999]">No liked messages yet</p>
-            <p className="text-xs text-[#bbb] mt-1">Heart a message to save it here</p>
+            <p className="text-sm text-muted-foreground">No liked messages yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Heart a message to save it here</p>
           </div>
         )}
       </div>

@@ -36,7 +36,7 @@ const AdminContext = (props: CoreAdminContextProps) => (
  * @internal
  */
 const AdminUI = (props: CoreAdminUIProps) => (
-  <ThemeProvider>
+  <ThemeProvider defaultTheme="dark">
     <CoreAdminUI
       layout={Layout}
       loginPage={LoginPage}

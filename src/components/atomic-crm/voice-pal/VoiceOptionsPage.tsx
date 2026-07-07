@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
-import { Check, Play, Pause } from "lucide-react";
+import { Check, Play, Pause, Moon, Sun } from "lucide-react";
+import { useTheme } from "@/components/admin/use-theme";
 
 type VoiceOption = {
   id: string;
@@ -22,6 +23,8 @@ export function VoiceOptionsPage() {
   const [selected, setSelected] = useState(() => localStorage.getItem("voice-pal-voice") || "nova");
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === "dark";
 
   const selectVoice = (id: string) => {
     setSelected(id);
@@ -54,16 +57,16 @@ export function VoiceOptionsPage() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-background">
       <div className="shrink-0 px-5 pt-6 pb-4">
-        <h1 className="text-xl font-semibold text-[#1a1a1a]" style={{ fontFamily: '"SF Pro Rounded", "Nunito", system-ui, sans-serif' }}>
+        <h1 className="text-xl font-semibold text-foreground" style={{ fontFamily: '"SF Pro Rounded", "Nunito", system-ui, sans-serif' }}>
           Voice Options
         </h1>
-        <p className="text-sm text-[#999] mt-1">Choose your preferred AI voice</p>
+        <p className="text-sm text-muted-foreground mt-1">Choose your preferred AI voice</p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 pb-8">
-        <h2 className="text-xs font-medium text-[#999] uppercase tracking-wider mb-3">Voice (Local · Kokoro)</h2>
+        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Voice (Local · Kokoro)</h2>
         <div className="flex flex-col gap-2.5">
           {voices.map((voice) => {
             const isSelected = selected === voice.id;
@@ -75,7 +78,7 @@ export function VoiceOptionsPage() {
                 className={`relative flex items-center gap-3 p-3 rounded-2xl border-2 text-left transition-all cursor-pointer ${
                   isSelected
                     ? "border-[#58a6ff] bg-[#58a6ff]/5"
-                    : "border-gray-100 bg-white hover:bg-[#f5f5f5]"
+                    : "border-border bg-card hover:bg-muted/60"
                 }`}
               >
                 <div className="relative shrink-0">
@@ -101,15 +104,15 @@ export function VoiceOptionsPage() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-[#1a1a1a]">{voice.name}</div>
-                  <div className="text-xs text-[#999] mt-0.5">{voice.description}</div>
+                  <div className="text-sm font-semibold text-foreground">{voice.name}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{voice.description}</div>
                 </div>
                 <button
                   onClick={(e) => previewVoice(voice, e)}
                   className={`p-2 rounded-full transition-colors shrink-0 ${
                     isPreviewing
                       ? "bg-[#58a6ff] text-white"
-                      : "bg-[#f0f0f0] text-[#666] hover:bg-[#e5e5e5]"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70"
                   }`}
                 >
                   {isPreviewing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
@@ -118,6 +121,24 @@ export function VoiceOptionsPage() {
             );
           })}
         </div>
+
+        {/* Appearance — dark mode (reuses the app's ThemeProvider / useTheme) */}
+        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mt-7 mb-3">Appearance</h2>
+        <button
+          onClick={() => setTheme(isDark ? "light" : "dark")}
+          className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-border bg-card hover:bg-muted/60 transition-colors text-left"
+        >
+          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-muted shrink-0">
+            {isDark ? <Moon className="w-5 h-5 text-[#58a6ff]" /> : <Sun className="w-5 h-5 text-amber-500" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-foreground">Dark mode</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Match the dark terminals</div>
+          </div>
+          <div className={`w-10 h-6 rounded-full relative transition-colors shrink-0 ${isDark ? "bg-[#58a6ff]" : "bg-muted-foreground/30"}`}>
+            <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${isDark ? "translate-x-5" : "translate-x-1"}`} />
+          </div>
+        </button>
       </div>
     </div>
   );

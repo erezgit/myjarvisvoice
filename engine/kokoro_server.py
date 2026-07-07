@@ -59,23 +59,39 @@ MODEL_FILES = {
 }
 
 # Agent <-> voice catalogue. The app's Settings maps an agent to one of these.
+# Full MyJarvis roster. Kokoro ids + OpenAI-style aliases are kept in sync with
+# the dashboard source of truth (functions/api/voice OPENAI_TO_KOKORO).
 VOICES = [
     {"id": "am_echo", "label": "Jarvis", "agent": "jarvis", "alias": "echo"},
     {"id": "am_onyx", "label": "Atlas", "agent": "atlas", "alias": "onyx"},
     {"id": "bm_fable", "label": "Ben", "agent": "ben", "alias": "fable"},
     {"id": "af_nova", "label": "Nova", "agent": "nova", "alias": "nova"},
+    {"id": "bf_emma", "label": "Emma", "agent": "emma", "alias": "alloy"},
+    {"id": "af_aoede", "label": "Cleo", "agent": "cleo", "alias": "shimmer"},
+    {"id": "am_michael", "label": "Kai", "agent": "kai", "alias": "am_michael"},
+    {"id": "am_adam", "label": "Dave", "agent": "dave", "alias": "am_adam"},
+    {"id": "am_liam", "label": "Leo", "agent": "leo", "alias": "am_liam"},
 ]
-# OpenAI-style aliases -> Kokoro ids, so existing UI voice ids keep working.
+# OpenAI-style + agent-name aliases -> Kokoro ids, so existing voice ids keep
+# working. alloy/shimmer map to DISTINCT voices (bf_emma/af_aoede) — matching
+# the dashboard — so Emma and Cleo no longer collide with Jarvis and Nova.
 ALIASES = {
+    # OpenAI-style
     "echo": "am_echo",
     "onyx": "am_onyx",
     "fable": "bm_fable",
     "nova": "af_nova",
-    "alloy": "am_echo",
-    "shimmer": "af_nova",
+    "alloy": "bf_emma",
+    "shimmer": "af_aoede",
+    # agent-name
     "jarvis": "am_echo",
     "atlas": "am_onyx",
     "ben": "bm_fable",
+    "emma": "bf_emma",
+    "cleo": "af_aoede",
+    "kai": "am_michael",
+    "dave": "am_adam",
+    "leo": "am_liam",
 }
 DEFAULT_VOICE = "am_echo"
 

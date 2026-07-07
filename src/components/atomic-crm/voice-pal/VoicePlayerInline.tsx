@@ -43,6 +43,10 @@ export function VoicePlayerInline({ audioUrl, autoPlay }: VoicePlayerInlineProps
   // produces the sound AND drives the progress bar below — one source of truth.
   useEffect(() => {
     if (!autoPlay || autoPlayedUrls.has(audioUrl)) return;
+    // Don't interrupt a message that's already playing. If something is playing,
+    // leave this one waiting with its green play button — Erez clicks it when
+    // he's ready. Only auto-play when the player is idle. (Erez, 2026-07-08.)
+    if (audioManager.isPlaying()) return;
     autoPlayedUrls.add(audioUrl);
     audioManager.play(audioUrl);
     markPlayed(audioUrl);
@@ -115,7 +119,7 @@ export function VoicePlayerInline({ audioUrl, autoPlay }: VoicePlayerInlineProps
             ? "bg-green-600 text-white"
             : isNew
               ? "bg-green-600 hover:bg-green-500 text-white"
-              : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+              : "bg-muted hover:bg-muted/70 text-foreground"
         }`}
       >
         {isPlaying ? (
@@ -126,7 +130,7 @@ export function VoicePlayerInline({ audioUrl, autoPlay }: VoicePlayerInlineProps
       </button>
 
       <div className="flex-1 flex items-center gap-2">
-        <span className="text-xs text-gray-500 min-w-[40px]">
+        <span className="text-xs text-muted-foreground min-w-[40px]">
           {formatTime(currentTime)}
         </span>
 
@@ -138,7 +142,7 @@ export function VoicePlayerInline({ audioUrl, autoPlay }: VoicePlayerInlineProps
           className="flex-1"
         />
 
-        <span className="text-xs text-gray-500 min-w-[40px]">
+        <span className="text-xs text-muted-foreground min-w-[40px]">
           {formatTime(duration)}
         </span>
       </div>
