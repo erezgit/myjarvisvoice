@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Heart, Copy, Download, Mic, Volume2, VolumeX } from "lucide-react";
+import { Heart, Copy, Download, Mic } from "lucide-react";
 import { VoicePlayerInline } from "./VoicePlayerInline";
 import { UnlikeConfirm } from "./UnlikeConfirm";
 import { ModelDownloadBanner } from "./ModelDownloadBanner";
@@ -129,23 +129,14 @@ export function VoicePalPage() {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      {/* Top bar — autoplay toggle */}
-      <div className="flex items-center justify-end px-4 py-2 border-b border-border shrink-0">
+      {/* Top bar — bare autoplay switch */}
+      <div className="flex items-center justify-end px-4 py-2 shrink-0">
         <button
           onClick={toggleAutoPlay}
-          title={autoPlayEnabled ? "Autoplay on — new messages play automatically" : "Autoplay off — new messages wait for you to press play"}
-          className={`flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-full border text-[11px] font-medium transition-colors ${
-            autoPlayEnabled
-              ? "border-green-600/40 text-green-600"
-              : "border-border text-muted-foreground hover:text-foreground"
-          }`}
+          title={autoPlayEnabled ? "Autoplay on" : "Autoplay off"}
+          className={`relative inline-block w-9 h-5 rounded-full transition-colors ${autoPlayEnabled ? "bg-green-600" : "bg-muted"}`}
         >
-          {autoPlayEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-          <span>Autoplay</span>
-          {/* Track + knob */}
-          <span className={`relative inline-block w-7 h-4 rounded-full transition-colors ${autoPlayEnabled ? "bg-green-600" : "bg-muted"}`}>
-            <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all ${autoPlayEnabled ? "left-3.5" : "left-0.5"}`} />
-          </span>
+          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${autoPlayEnabled ? "left-[18px]" : "left-0.5"}`} />
         </button>
       </div>
 
