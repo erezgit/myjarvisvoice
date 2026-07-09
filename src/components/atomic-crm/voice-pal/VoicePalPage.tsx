@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Heart, Copy, Download, Mic } from "lucide-react";
+import { Heart, Copy, Download, Mic, Volume2, VolumeX } from "lucide-react";
 import { VoicePlayerInline } from "./VoicePlayerInline";
 import { UnlikeConfirm } from "./UnlikeConfirm";
 import { ModelDownloadBanner } from "./ModelDownloadBanner";
@@ -46,11 +46,29 @@ function ExpandableText({ text }: { text: string }) {
   );
 }
 
+const AUTOPLAY_KEY = "mc-autoplay-enabled";
+
 export function VoicePalPage() {
   const [messages, setMessages] = useState<VoiceMessage[]>([]);
   const [unlikeId, setUnlikeId] = useState<number | null>(null);
   const [autoPlayId, setAutoPlayId] = useState<number | null>(null);
+  // Autoplay toggle — persisted, default ON (current behavior). When OFF, a new
+  // message still arrives but never auto-plays; Erez clicks its green play button.
+  const [autoPlayEnabled, setAutoPlayEnabled] = useState<boolean>(
+    () => localStorage.getItem(AUTOPLAY_KEY) !== "false",
+  );
   const latestIdRef = useRef<number>(0);
+  // Ref mirror so the SSE fetch closure reads the LIVE toggle, not a stale capture.
+  const autoPlayEnabledRef = useRef<boolean>(autoPlayEnabled);
+  autoPlayEnabledRef.current = autoPlayEnabled;
+
+  const toggleAutoPlay = () => {
+    setAutoPlayEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem(AUTOPLAY_KEY, String(next));
+      return next;
+    });
+  };
 
   // The player is the single source of truth: when a NEW message arrives we flag
   // it so the inline player auto-plays it (sound + progress bar together).
@@ -63,7 +81,7 @@ export function VoicePalPage() {
             latestIdRef.current = msgs[0].id;
           } else if (msgs[0].id > latestIdRef.current) {
             latestIdRef.current = msgs[0].id;
-            setAutoPlayId(msgs[0].id);
+            if (autoPlayEnabledRef.current) setAutoPlayId(msgs[0].id);
           }
         }
         setMessages(msgs);
@@ -111,6 +129,26 @@ export function VoicePalPage() {
 
   return (
     <div className="flex h-full flex-col bg-background">
+      {/* Top bar — autoplay toggle */}
+      <div className="flex items-center justify-end px-4 py-2 border-b border-border shrink-0">
+        <button
+          onClick={toggleAutoPlay}
+          title={autoPlayEnabled ? "Autoplay on — new messages play automatically" : "Autoplay off — new messages wait for you to press play"}
+          className={`flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-full border text-[11px] font-medium transition-colors ${
+            autoPlayEnabled
+              ? "border-green-600/40 text-green-600"
+              : "border-border text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {autoPlayEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+          <span>Autoplay</span>
+          {/* Track + knob */}
+          <span className={`relative inline-block w-7 h-4 rounded-full transition-colors ${autoPlayEnabled ? "bg-green-600" : "bg-muted"}`}>
+            <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all ${autoPlayEnabled ? "left-3.5" : "left-0.5"}`} />
+          </span>
+        </button>
+      </div>
+
       {/* Model download flow — shows only until the local Kokoro model is present */}
       <ModelDownloadBanner />
 
