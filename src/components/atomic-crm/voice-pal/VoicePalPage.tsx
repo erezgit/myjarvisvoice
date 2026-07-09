@@ -128,13 +128,16 @@ export function VoicePalPage() {
   });
 
   return (
-    <div className="flex h-full flex-col bg-background">
-      {/* Top bar — bare autoplay switch */}
-      <div className="flex items-center justify-end px-4 py-2 shrink-0">
+    <div className="relative flex h-full flex-col bg-background">
+      {/* Pinned transparent switch — stays fixed at the top while the feed scrolls
+          underneath. The strip is transparent + pointer-events-none so only the
+          switch shows and clicks fall through to the cards; the switch itself is
+          the one interactive element. */}
+      <div className="pointer-events-none sticky top-0 z-20 flex justify-end px-4 pt-4">
         <button
           onClick={toggleAutoPlay}
           title={autoPlayEnabled ? "Autoplay on" : "Autoplay off"}
-          className={`relative inline-block w-9 h-5 rounded-full transition-colors ${autoPlayEnabled ? "bg-green-600" : "bg-muted"}`}
+          className={`pointer-events-auto relative inline-block w-9 h-5 rounded-full transition-colors ${autoPlayEnabled ? "bg-green-600" : "bg-muted"}`}
         >
           <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${autoPlayEnabled ? "left-[18px]" : "left-0.5"}`} />
         </button>
@@ -143,8 +146,9 @@ export function VoicePalPage() {
       {/* Model download flow — shows only until the local Kokoro model is present */}
       <ModelDownloadBanner />
 
-      {/* Today's voice feed */}
-      <div className="flex-1 px-4 py-4 space-y-2.5">
+      {/* Today's voice feed — pulled up under the floating switch so the gap above
+          the first card matches the side gap (16px). */}
+      <div className="flex-1 px-4 pb-4 space-y-2.5 -mt-5">
         {todayMessages.map((msg) => (
           <div
             key={msg.id}
