@@ -146,9 +146,9 @@ export function VoicePalPage() {
       {/* Model download flow — shows only until the local Kokoro model is present */}
       <ModelDownloadBanner />
 
-      {/* Today's voice feed — pulled up under the floating switch so the gap above
-          the first card matches the side gap (16px). */}
-      <div className="flex-1 px-4 pb-4 space-y-2.5 -mt-5">
+      {/* Today's voice feed — sits below the floating switch with a comfortable gap
+          so the first card clears the switch and the top breathes like the bottom. */}
+      <div className="flex-1 px-4 pb-4 space-y-2.5 pt-3">
         {todayMessages.map((msg) => (
           <div
             key={msg.id}
