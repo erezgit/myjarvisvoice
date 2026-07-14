@@ -27,6 +27,7 @@ const AGENT_META: Record<string, { label: string; avatar: string; color: string 
   kai: { label: "Kai", avatar: "/avatars/kai.jpg", color: "#0ea5e9" },
   dave: { label: "Dave", avatar: "/avatars/dave.jpg", color: "#a16207" },
   leo: { label: "Leo", avatar: "/avatars/leo.jpg", color: "#f59e0b" },
+  milo: { label: "Milo", avatar: "/avatars/milo.jpg", color: "#2dd4bf" },
   echo: { label: "Echo", avatar: "/avatars/echo.jpg", color: "#16a34a" },
 };
 
