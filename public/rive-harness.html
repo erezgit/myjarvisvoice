@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Rive Pal harness</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b1020;display:flex;align-items:center;justify-content:center;font-family:system-ui;color:#cde}
+  #stage{width:560px;height:720px;border-radius:24px;background:linear-gradient(#141a33,#0b1020);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 20px 60px #0008;padding:12px}
+  canvas{width:480px;height:480px}
+  #info{color:#8aa;font:11px monospace;margin-top:6px;white-space:pre-wrap;text-align:center;max-width:520px}
+  #ctrls{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px}
+  button{padding:5px 9px;border-radius:8px;border:1px solid #345;background:#1a2140;color:#cde;cursor:pointer;font-size:12px}
+</style>
+<script src="https://unpkg.com/@rive-app/canvas@2.30.0"></script>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c" width="960" height="960"></canvas>
+  <div id="info">loading…</div>
+  <div id="ctrls"></div>
+</div>
+<script>
+const info = document.getElementById('info');
+const ctrls = document.getElementById('ctrls');
+const file = new URLSearchParams(location.search).get('f') || 'dog404';
+let sm = null;
+
+const r = new rive.Rive({
+  src: '/rive/' + file + '.riv',
+  canvas: document.getElementById('c'),
+  autoplay: true,
+  onLoad: () => {
+    r.resizeDrawingSurfaceToCanvas();
+    const anims = r.animationNames || [];
+    const sms = r.stateMachineNames || [];
+    let txt = file + '\nanimations: ' + JSON.stringify(anims) + '\nstateMachines: ' + JSON.stringify(sms);
+    if (sms.length) {
+      sm = sms[0];
+      try { r.play(sm); } catch(e){}
+      let inputs = [];
+      try { inputs = r.stateMachineInputs(sm) || []; } catch(e){ txt += '\ninputs err: '+e; }
+      txt += '\ninputs: ' + inputs.map(i => i.name + '(' + i.type + ')').join('  ');
+      inputs.forEach(inp => {
+        const b = document.createElement('button');
+        b.textContent = inp.name;
+        b.onclick = () => {
+          if (inp.type === 58 /*trigger*/ || typeof inp.fire === 'function' && inp.value === undefined) { try{inp.fire();}catch(e){} }
+          else if (typeof inp.value === 'boolean') inp.value = !inp.value;
+          else inp.value = (inp.value ? 0 : 100);
+        };
+        ctrls.appendChild(b);
+      });
+    } else {
+      // no SM: offer per-animation play buttons
+      anims.forEach(a => {
+        const b = document.createElement('button'); b.textContent = a;
+        b.onclick = () => { r.stop(); r.play(a); };
+        ctrls.appendChild(b);
+      });
+    }
+    info.textContent = txt;
+  },
+  onLoadError: (e) => { info.textContent = 'LOAD ERROR: ' + e; },
+});
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Home, Heart, Settings as SettingsIcon } from "lucide-react";
+import { Home, Heart, Dog, Settings as SettingsIcon } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 import { Notification } from "@/components/admin/notification";
 import { Error } from "@/components/admin/error";
@@ -54,6 +54,7 @@ const BottomBar = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const onHome = pathname === "/voice-pal";
+  const onPal = pathname === "/voice-pal/pal";
   const onLikes = pathname === "/voice-pal/likes";
   const onVoices = pathname === "/voice-pal/voices";
   const go = (target: string, active: boolean) =>
@@ -72,6 +73,19 @@ const BottomBar = () => {
         }`}
       >
         <Home className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="Desktop Pal"
+        title="Desktop Pal"
+        onClick={() => go("/voice-pal/pal", onPal)}
+        className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
+          onPal
+            ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
+            : "border-border text-muted-foreground hover:bg-muted"
+        }`}
+      >
+        <Dog className="h-4 w-4" />
       </button>
       <button
         type="button"
