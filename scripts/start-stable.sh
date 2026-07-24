@@ -7,6 +7,13 @@
 # process (setsid + nohup). Nothing shares a lifecycle, so stopping one — or the
 # terminal that launched them — does NOT take the app down. It just keeps running.
 #
+# NOTE (2026-07-25): the engine (:8787) and API (:3001) are now ALSO managed by
+# launchd — com.myjarvis.voice-engine / com.myjarvis.voice-api — so they come up
+# at login and restart if they die. This script's `up <port> ||` guards make it a
+# no-op for anything launchd already has running; it stays useful for the window
+# and for a manual bring-up. Stop the daemons with:
+#   launchctl bootout gui/$(id -u)/com.myjarvis.voice-{engine,api}
+#
 # Requires the debug binary to already be built once:
 #   (cd src-tauri && cargo build)   — or a prior `npm run tauri dev`.
 #
@@ -18,7 +25,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 RUN="$ROOT/.run"; mkdir -p "$RUN"
 ENGINE_PY="${ENGINE_PY:-engine/.venv/bin/python}"
-BIN="src-tauri/target/debug/tauri-app"
+# The PACKAGED app in /Applications is the current build (installed 2026-07-17).
+# The old `cargo build` debug binary no longer exists, which silently broke this
+# script (2026-07-25) — prefer the installed app, fall back to a debug build.
+BIN="/Applications/My Jarvis Voice.app/Contents/MacOS/tauri-app"
+[ -x "$BIN" ] || BIN="src-tauri/target/debug/tauri-app"
 
 up() { lsof -iTCP:"$1" -sTCP:LISTEN -n >/dev/null 2>&1; }
 # Detach a process into its OWN session (macOS has no `setsid`, so use python's
@@ -41,7 +52,7 @@ if [ "${1:-}" = "stop" ]; then
   pkill -f "engine/kokoro_server.py" 2>/dev/null
   pkill -f "tsx server/index.ts" 2>/dev/null
   pkill -f "$ROOT.*vite" 2>/dev/null
-  pkill -f "target/debug/tauri-app" 2>/dev/null
+  pkill -f "tauri-app" 2>/dev/null
   echo "stopped."
   exit 0
 fi
@@ -60,11 +71,11 @@ for i in $(seq 1 120); do
 done
 
 # 4) The native window — run the prebuilt binary directly (no `tauri dev`, no trap)
-if ! pgrep -f "target/debug/tauri-app" >/dev/null 2>&1; then
+if ! pgrep -f "tauri-app" >/dev/null 2>&1; then
   if [ -x "$BIN" ]; then
     spawn window "$BIN"
   else
-    echo "ERROR: $BIN not built. Run: (cd src-tauri && cargo build)"
+    echo "ERROR: no app binary found. Install the packaged app, or: (cd src-tauri && cargo build)"
     exit 1
   fi
 fi
