@@ -29,10 +29,33 @@ const AGENT_META: Record<string, { label: string; avatar: string; color: string 
   leo: { label: "Leo", avatar: "/avatars/leo.jpg", color: "#f59e0b" },
   milo: { label: "Milo", avatar: "/avatars/milo.jpg", color: "#2dd4bf" },
   echo: { label: "Echo", avatar: "/avatars/echo.jpg", color: "#16a34a" },
+  remy: { label: "Remy", avatar: "/avatars/remy.jpg", color: "#dc2626" },
+  quill: { label: "Quill", avatar: "/avatars/quill.jpg", color: "#8b5cf6" },
+  pixel: { label: "Pixel", avatar: "/avatars/pixel.jpg", color: "#ec4899" },
+  sol: { label: "Sol", avatar: "/avatars/sol.jpg", color: "#f59e0b" },
+  "dex-ds": { label: "Dex-DS", avatar: "/avatars/dex-ds.jpg", color: "#14b8a6" },
+  otto: { label: "Otto", avatar: "/avatars/otto.jpg", color: "#334155" },
+  hank: { label: "Hank", avatar: "/avatars/hank.jpg", color: "#9a3412" },
+  dev1: { label: "Dev1", avatar: "/avatars/dev1.jpg", color: "#4338ca" },
+  dev2: { label: "Dev2", avatar: "/avatars/dev2.jpg", color: "#be123c" },
+  vera: { label: "Vera", avatar: "/avatars/vera.jpg", color: "#047857" },
 };
 
 function agentMeta(agent: string | null) {
   return agent ? AGENT_META[agent.toLowerCase()] : undefined;
+}
+
+// Fallback label for an agent that isn't in AGENT_META yet. Previously an
+// unregistered agent rendered with NO avatar AND NO name — a nameless grey
+// card — so a newly-added agent looked broken until someone remembered to
+// edit the map. Showing the name it sent means the worst case is a generic
+// icon, never an anonymous message.
+function prettyAgent(agent: string) {
+  return agent
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("-");
 }
 
 function ExpandableText({ text }: { text: string }) {
@@ -168,9 +191,9 @@ export function VoicePalPage() {
                   <Mic className="w-3 h-3 text-muted-foreground" />
                 </div>
               )}
-              {agentMeta(msg.agent) && (
+              {msg.agent && (
                 <span className="text-sm font-medium text-foreground">
-                  {agentMeta(msg.agent)!.label}
+                  {agentMeta(msg.agent)?.label ?? prettyAgent(msg.agent)}
                 </span>
               )}
               <span className="text-[11px] text-muted-foreground tabular-nums">
