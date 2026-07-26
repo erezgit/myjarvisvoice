@@ -144,9 +144,19 @@ export const VoiceMessageComponent = memo(function VoiceMessageComponent({ messa
       <audio
         ref={audioRef}
         src={resolvedAudioUrl}
-        onEnded={() => setIsPlaying(false)}
+        onEnded={() => {
+          setIsPlaying(false);
+          voicePlayedTracker.releaseLock(resolvedAudioUrl);
+        }}
         onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
+        onPause={() => {
+          setIsPlaying(false);
+          voicePlayedTracker.releaseLock(resolvedAudioUrl);
+        }}
+        onError={() => {
+          setIsPlaying(false);
+          voicePlayedTracker.releaseLock(resolvedAudioUrl);
+        }}
         onLoadedMetadata={handleLoadedMetadata}
         preload="metadata"
       />

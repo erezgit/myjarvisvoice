@@ -66,6 +66,10 @@ const VoicePlayer = memo(function VoicePlayer({
 
     return () => {
       clearTimeout(timeoutId);
+      // If this player still holds the global lock when it unmounts (list
+      // re-render, view switch, window close mid-playback), release it —
+      // otherwise `ended` never fires and every later message is skipped.
+      voicePlayedTracker.releaseLock(audioUrl);
     };
   }, [autoPlay, audioUrl]);
 
@@ -177,8 +181,18 @@ const VoicePlayer = memo(function VoicePlayer({
           }}
           onPause={() => {
             setIsPlaying(false);
-            // Don't call markAsPaused here — unmount fires pause event,
-            // which would erase tracking and cause replay on remount
+            // Release the GLOBAL lock but keep this url in playedVoiceIds.
+            // (markAsPaused would erase it from played-tracking and cause a
+            // replay on remount — releaseLock deliberately does not.)
+            // Without this, pausing a message held the lock forever and
+            // silenced every later message until the app was restarted.
+            voicePlayedTracker.releaseLock(audioUrl);
+          }}
+          onError={() => {
+            // The lock was previously released ONLY by `ended`. A decode/network
+            // error left it stranded and muted the app until restart.
+            setIsPlaying(false);
+            voicePlayedTracker.markAsFailed(audioUrl);
           }}
           onLoadedMetadata={handleLoadedMetadata}
           preload="auto"
