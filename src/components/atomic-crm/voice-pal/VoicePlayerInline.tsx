@@ -41,6 +41,11 @@ export function VoicePlayerInline({ audioUrl, autoPlay }: VoicePlayerInlineProps
 
   // Auto-play the newest message through the shared player. This single playback
   // produces the sound AND drives the progress bar below — one source of truth.
+  //
+  // Note it does NOT mark the message played here. "Played" must mean sound
+  // actually happened, not that we asked for it — otherwise a silent failure
+  // still burns the green "new" badge and the message looks heard when it
+  // wasn't. The subscriber below promotes it once playback genuinely starts.
   useEffect(() => {
     if (!autoPlay || autoPlayedUrls.has(audioUrl)) return;
     // Don't interrupt a message that's already playing. If something is playing,
@@ -49,18 +54,22 @@ export function VoicePlayerInline({ audioUrl, autoPlay }: VoicePlayerInlineProps
     if (audioManager.isPlaying()) return;
     autoPlayedUrls.add(audioUrl);
     audioManager.play(audioUrl);
-    markPlayed(audioUrl);
-    setIsNew(false);
   }, [autoPlay, audioUrl]);
 
-  // Reflect the shared player's state for this URL.
+  // Reflect the shared player's state for this URL, and retire the "new" badge
+  // only once this URL has actually produced sound.
   useEffect(() => {
     const sync = () => {
-      const playing = audioManager.isPlayingSrc(audioUrl);
-      setIsPlaying(playing);
+      setIsPlaying(audioManager.isPlayingSrc(audioUrl));
       if (audioManager.getCurrentSrc().endsWith(audioUrl)) {
         setCurrentTime(audioManager.getCurrentTime());
         setDuration(audioManager.getDuration());
+      }
+      if (audioManager.hasStarted(audioUrl)) {
+        setIsNew((wasNew) => {
+          if (wasNew) markPlayed(audioUrl);
+          return false;
+        });
       }
     };
     const unsub = audioManager.subscribe(sync);
@@ -82,14 +91,14 @@ export function VoicePlayerInline({ audioUrl, autoPlay }: VoicePlayerInlineProps
     return () => cancelAnimationFrame(raf);
   }, [isPlaying, audioUrl]);
 
+  // A click is a user gesture, which is also what lets the analyser context
+  // resume. The badge is retired by the subscriber above once sound starts,
+  // not here — so a click on a broken file leaves it green rather than
+  // pretending it was heard.
   const togglePlay = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     audioManager.toggle(audioUrl);
-    if (isNew) {
-      markPlayed(audioUrl);
-      setIsNew(false);
-    }
-  }, [audioUrl, isNew]);
+  }, [audioUrl]);
 
   const cycleSpeed = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
