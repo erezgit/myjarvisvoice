@@ -58,6 +58,42 @@ audio.addEventListener("ended", notify);
 audio.addEventListener("timeupdate", notify);
 audio.addEventListener("loadedmetadata", notify);
 
+// ── Stall guard ─────────────────────────────────────────────────────────────
+// `isPlaying()` is `!audio.paused`, and auto-play of a new message is gated on
+// it (`if (audioManager.isPlaying()) return`). An <audio> element that was
+// asked to play but whose media never arrives — a 404, the :3001 server
+// blipping, a half-written file — stays NON-paused indefinitely. `paused`
+// never flips back, so `isPlaying()` returned true forever and every later
+// message was silently skipped: no sound, no error, nothing logged. Only
+// restarting the app (which constructs a fresh Audio element) recovered it.
+//
+// Fix: remember when playback last actually advanced. If the element claims to
+// be playing but has made no progress for STALL_MS, it is wedged, not playing.
+const STALL_MS = 10_000;
+let lastProgressAt = 0;
+
+const markProgress = () => {
+  lastProgressAt = Date.now();
+};
+audio.addEventListener("play", markProgress);
+audio.addEventListener("playing", markProgress);
+audio.addEventListener("timeupdate", markProgress);
+
+// The element had no error handler at all, so a failed load was invisible.
+audio.addEventListener("error", () => {
+  console.warn("[audioManager] audio error for", audio.src, audio.error?.message);
+  lastProgressAt = 0;
+  try {
+    audio.pause();
+  } catch {
+    /* nothing sensible to do */
+  }
+  notify();
+});
+audio.addEventListener("stalled", () => {
+  console.warn("[audioManager] stalled on", audio.src);
+});
+
 function matches(src: string): boolean {
   return audio.src === src || audio.src.endsWith(src);
 }
@@ -89,8 +125,28 @@ export const audioManager = {
     audio.playbackRate = rate;
   },
 
+  /**
+   * True only if audio is genuinely playing. A wedged element (asked to play,
+   * media never arrived) reports `paused === false` forever; treat "no progress
+   * for STALL_MS" as not playing so a single bad file can never mute the app.
+   */
   isPlaying(): boolean {
-    return !audio.paused;
+    if (audio.paused || audio.ended) return false;
+    if (lastProgressAt && Date.now() - lastProgressAt > STALL_MS) {
+      console.warn(
+        "[audioManager] stalled playback held the auto-play gate for",
+        Math.round((Date.now() - lastProgressAt) / 1000) + "s — releasing",
+        audio.src,
+      );
+      try {
+        audio.pause();
+      } catch {
+        /* ignore */
+      }
+      lastProgressAt = 0;
+      return false;
+    }
+    return true;
   },
 
   /**
@@ -141,7 +197,7 @@ export const audioManager = {
   },
 
   isPlayingSrc(src: string): boolean {
-    return !audio.paused && matches(src);
+    return audioManager.isPlaying() && matches(src);
   },
 
   getCurrentSrc(): string {
