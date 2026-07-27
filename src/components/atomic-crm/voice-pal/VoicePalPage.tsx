@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { setPageOwnsPlayback } from "./voiceAutoplay";
 import { Heart, Copy, Download, Mic } from "lucide-react";
 import { VoicePlayerInline } from "./VoicePlayerInline";
 import { UnlikeConfirm } from "./UnlikeConfirm";
@@ -112,6 +113,14 @@ export function VoicePalPage() {
       })
       .catch(console.error);
   };
+
+  // While this page is open IT owns playback — the inline player drives the
+  // progress bar and the Pal's amplitude. The app-level service stays quiet so
+  // nothing plays twice, and takes over the moment this unmounts.
+  useEffect(() => {
+    setPageOwnsPlayback(true);
+    return () => setPageOwnsPlayback(false);
+  }, []);
 
   useEffect(() => {
     fetchMessages(true);
