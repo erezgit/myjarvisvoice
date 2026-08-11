@@ -47,9 +47,7 @@ import { QALogPage } from "../qa-log/QALogPage";
 import { VoicePalPage } from "../voice-pal/VoicePalPage";
 import { LikesPage } from "../voice-pal/LikesPage";
 import { VoiceOptionsPage } from "../voice-pal/VoiceOptionsPage";
-import { PalPage } from "../voice-pal/PalPage";
 import { CostAnalyticsPage } from "../voice-pal/CostAnalyticsPage";
-import { AvatarShowcasePage } from "../voice-pal/AvatarShowcasePage";
 import { LoginPage } from "../voice-pal/LoginPage";
 import { InsightsPage } from "../insights/InsightsPage";
 import { FilesPage } from "../files/FilesPage";
@@ -237,12 +235,10 @@ const DesktopAdmin = (props: CoreAdminProps) => {
         <Route path={KnowledgeBasePage.path} element={<KnowledgeBasePage />} />
         <Route path={QALogPage.path} element={<QALogPage />} />
         <Route path={VoicePalPage.path} element={<VoicePalPage />} />
-        <Route path={PalPage.path} element={<PalPage />} />
 
         <Route path={LikesPage.path} element={<LikesPage />} />
         <Route path={VoiceOptionsPage.path} element={<VoiceOptionsPage />} />
         <Route path={CostAnalyticsPage.path} element={<CostAnalyticsPage />} />
-        <Route path={AvatarShowcasePage.path} element={<AvatarShowcasePage />} />
         <Route path={InsightsPage.path} element={<InsightsPage />} />
         <Route path={FilesPage.path} element={<FilesPage />} />
         <Route path={TicketsPage.path} element={<TicketsPage />} />

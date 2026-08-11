@@ -133,6 +133,42 @@ function tryBuildGraph(): void {
   }
 }
 
+/**
+ * Keep a BUILT graph audible. This is the other half of hazard 1 and the half
+ * that was missing.
+ *
+ * `tryBuildGraph()` cannot do this job: its first line returns the moment
+ * `graphReady` is true, so the `ctx.resume()` below it — the only resume in the
+ * module — is unreachable for the rest of the session. Once the graph exists
+ * the element is IRREVERSIBLY routed through the context, and macOS suspends a
+ * context whenever the app is backgrounded, blurred, or simply idle. The result
+ * is the exact reported symptom: the FIRST message plays (the click is a
+ * gesture, the context resumes, the graph gets built), and every LATER message
+ * is silent while the element cheerfully reports playing and currentTime
+ * advances into a stalled graph.
+ *
+ * So: before every play, if the graph is live and the context has gone to
+ * sleep, wake it.
+ */
+function ensureCtxRunning(): void {
+  if (!graphReady || !audioCtx) return;
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume().catch(() => {
+      console.warn("[audioManager] could not resume a suspended AudioContext");
+    });
+  }
+}
+
+// The context is suspended by the OS on blur/background, so wake it the moment
+// we come back rather than waiting for the next play() — otherwise an auto-play
+// that fires while returning to the app is silent.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) ensureCtxRunning();
+  });
+  window.addEventListener("focus", ensureCtxRunning);
+}
+
 function matches(src: string): boolean {
   return audio.src === src || audio.src.endsWith(src);
 }
@@ -140,6 +176,9 @@ function matches(src: string): boolean {
 export const audioManager = {
   /** Play a URL from the start (or resume if it is already the current one). */
   play(src: string) {
+    // A suspended context silences a built graph completely. Wake it FIRST —
+    // after play() would leave this message inaudible and only fix the next.
+    ensureCtxRunning();
     if (!matches(src)) audio.src = src;
     audio.play().catch((err) => {
       console.warn("[audioManager] play() rejected for", src, err?.message);
