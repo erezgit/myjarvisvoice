@@ -322,13 +322,37 @@ app.post("/api/voice-preview-xai", async (req, res) => {
 app.use("/voice", express.static(path.join(process.env.DATA_DIR || path.join(os.homedir(), "Library", "Application Support", "My Jarvis"), "voice")));
 
 // GET voice messages (optionally filtered by agent)
+//
+// ⚠️ THE FEED IS PAGED, AND IT WAS NOT (fixed 2026-08-12). This endpoint used to
+// `SELECT *` with no LIMIT. By the time anyone noticed the app felt slow it was
+// returning 5,433 rows and 5.0 MB of JSON on EVERY load — the server answered in
+// 85ms and the browser then had to parse five megabytes and render five thousand
+// cards. The app did not degrade; it degraded PER MESSAGE, invisibly, and the
+// only symptom was "it feels sluggish now".
+//
+// The audio was never the problem — `reapVoiceAudio` keeps the newest 500 files
+// and works. It was the transcript rows, which are kept forever on purpose
+// because they are small and worth having. Keeping them is right; SENDING them
+// all is not.
+//
+// `?limit=` overrides for anything that genuinely wants more; `?limit=0` means
+// everything, so no caller is cut off from data it used to get.
+const FEED_PAGE = 200;
+
 app.get("/api/voice_messages", (req, res) => {
   const { agent } = req.query;
+  const asked = Number(req.query.limit);
+  const limit = Number.isFinite(asked) && asked >= 0 ? asked : FEED_PAGE;
+  const cap = limit === 0 ? -1 : limit; // SQLite: LIMIT -1 means no limit
   if (agent) {
-    const rows = db.prepare("SELECT * FROM voice_messages WHERE agent = ? ORDER BY created_at DESC").all(agent);
+    const rows = db
+      .prepare("SELECT * FROM voice_messages WHERE agent = ? ORDER BY created_at DESC LIMIT ?")
+      .all(agent, cap);
     res.json(rows);
   } else {
-    const rows = db.prepare("SELECT * FROM voice_messages ORDER BY created_at DESC").all();
+    const rows = db
+      .prepare("SELECT * FROM voice_messages ORDER BY created_at DESC LIMIT ?")
+      .all(cap);
     res.json(rows);
   }
 });
@@ -1059,10 +1083,67 @@ async function seedVoiceFeed(): Promise<void> {
   console.log(`[seed] inserted ${demo.length} demo voice messages`);
 }
 
+/**
+ * Reap old voice audio.
+ *
+ * Every /api/voice call writes an UNCOMPRESSED wav — 1-3 MB each — and until
+ * now nothing ever removed one. On this machine that had reached 4,727 files
+ * and 8.5 GB in about five weeks. It is not what makes playback silent (that
+ * was a suspended AudioContext), but left alone it fills a disk.
+ *
+ * The rule: keep the newest KEEP_MESSAGES, delete the audio for everything
+ * older, and NULL that row's audio_path in the same pass. Rows are kept — the
+ * transcript is small and worth having — but a row must never point at a file
+ * that is gone, or the feed offers a play button that can only fail.
+ */
+const KEEP_MESSAGES = 500;
+
+function reapVoiceAudio(): void {
+  try {
+    const audioDir = path.join(process.env.DATA_DIR || path.join(os.homedir(), "Library", "Application Support", "My Jarvis"), "voice");
+    if (!fs.existsSync(audioDir)) return;
+
+    const stale = db.prepare(
+      `SELECT id, audio_path FROM voice_messages
+        WHERE audio_path IS NOT NULL
+          AND id NOT IN (SELECT id FROM voice_messages ORDER BY id DESC LIMIT ?)`,
+    ).all(KEEP_MESSAGES) as { id: number; audio_path: string }[];
+
+    const clear = db.prepare("UPDATE voice_messages SET audio_path = NULL WHERE id = ?");
+    let removed = 0, bytes = 0;
+    for (const row of stale) {
+      const file = path.join(audioDir, path.basename(row.audio_path));
+      try {
+        if (fs.existsSync(file)) { bytes += fs.statSync(file).size; fs.unlinkSync(file); removed++; }
+      } catch { /* a file we cannot delete is not worth failing startup over */ }
+      clear.run(row.id);
+    }
+
+    // Orphans: files on disk no row references any more (crashes, old seeds).
+    const referenced = new Set(
+      (db.prepare("SELECT audio_path FROM voice_messages WHERE audio_path IS NOT NULL").all() as { audio_path: string }[])
+        .map((r) => path.basename(r.audio_path)),
+    );
+    for (const name of fs.readdirSync(audioDir)) {
+      if (referenced.has(name)) continue;
+      try { const f = path.join(audioDir, name); bytes += fs.statSync(f).size; fs.unlinkSync(f); removed++; } catch { /* ignore */ }
+    }
+
+    if (removed) {
+      console.log(`[reap] removed ${removed} voice files, freed ${(bytes / 1e9).toFixed(2)} GB (keeping newest ${KEEP_MESSAGES})`);
+    }
+  } catch (e: any) {
+    console.warn("[reap] failed:", e.message);
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`SQLite API server running on http://localhost:${PORT}`);
   console.log(`Database: ${process.env.DATA_DIR || "data"}/crm.db`);
   console.log(`Local voice engine: ${VOICE_ENGINE_URL}`);
   // Best-effort, slightly delayed so the engine has a moment to come up.
   setTimeout(() => { seedVoiceFeed().catch((e) => console.warn("[seed] failed:", e.message)); }, 1500);
+  // Sweep on boot, then every 6h so a long-running app never accumulates again.
+  setTimeout(reapVoiceAudio, 4000);
+  setInterval(reapVoiceAudio, 6 * 60 * 60 * 1000);
 });
