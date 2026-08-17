@@ -1,17 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-// The library is INLINED into the frame, never fetched. The frame is sandboxed
-// without allow-same-origin and carries a CSP of `default-src 'none'`, so it has
-// no network at all — a CDN tag would simply never load. Bundling is not an
-// optimisation here, it is the only thing that works.
-//
-// It is VENDORED rather than deep-imported from node_modules: animejs v4 ships
-// an `exports` map that does not expose dist/bundles/*, so `animejs/dist/...`
-// fails to resolve. Refresh it with:
-//   cp node_modules/animejs/dist/bundles/anime.umd.min.js \
-//      src/components/atomic-crm/voice-pal/vendor/
-// Currently anime.js v4.5.0 (MIT). The UMD build attaches to `window.anime`.
-import animeUmd from "./vendor/anime.umd.min.js?raw";
 
 const API = "http://localhost:3001";
 
@@ -22,59 +10,6 @@ type CanvasDoc = {
   agent: string | null;
   created_at: string;
 };
-
-/**
- * Compose the document that actually runs in the frame.
- *
- * Three things are wrapped around the author's HTML:
- *
- *  1. A CSP of `default-src 'none'`. The sandbox attribute already denies the
- *     document an origin, which kills fetch/XHR and any reach into the app —
- *     but it does NOT stop a plain `<img src="https://…">` beacon. The spec's
- *     requirement is that the card "cannot call home", and only the CSP closes
- *     that last door. Inline script and style are allowed because everything
- *     here is inline by construction.
- *  2. anime.js, inlined, with its members lifted onto `window` so a document can
- *     write `animate(...)` directly.
- *  3. Sane defaults — transparent background, no margin, a readable font — so a
- *     bare `<div>Hello</div>` looks intentional on a dark card.
- */
-function buildFrameDoc(html: string): string {
-  // A `</script>` anywhere in an inlined script closes the tag early and dumps
-  // the remainder as text. Vanishingly unlikely in minified JS, but this is a
-  // one-line guarantee rather than an assumption.
-  const safeLib = animeUmd.replace(/<\/script/gi, "<\\/script");
-
-  return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:;">
-<style>
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: transparent; overflow: hidden;
-    font-family: ui-sans-serif, -apple-system, "SF Pro Text", system-ui, sans-serif;
-    color: #e7e5e4;
-  }
-  * { box-sizing: border-box; }
-</style>
-<script>${safeLib}</script>
-<script>
-  // Lift anime's exports to globals so a document can call animate(), stagger(),
-  // createTimeline(), svg.*, utils.* without knowing the namespace.
-  (function () {
-    var a = window.anime;
-    if (!a) return;
-    for (var k in a) { if (!(k in window)) { window[k] = a[k]; } }
-  })();
-</script>
-</head>
-<body>
-${html}
-</body>
-</html>`;
-}
 
 /**
  * The pinned Canvas card — Jarvis's visual channel.
@@ -165,13 +100,19 @@ export function CanvasCard() {
             SQLite API on :3001, and everything those can reach — the two flags
             together are documented by the HTML spec as equivalent to removing
             the sandbox. It stays exactly as it is.
+
+            `src`, NOT `srcDoc`: a srcdoc frame inherits the embedding page's
+            CSP, and Tauri's has no 'unsafe-inline' for scripts — so in the real
+            desktop app a srcdoc canvas rendered with no script and no styling
+            at all, while looking perfect in a browser. Loading from a real URL
+            means the frame carries the policy the SERVER sets on it.
             key={doc.id} remounts the frame per document so animations restart.
             pointer-events-none keeps v1 a display surface, not an input. */}
         <iframe
           key={doc.id}
           title={doc.title || "Canvas"}
           sandbox="allow-scripts"
-          srcDoc={buildFrameDoc(doc.html)}
+          src={`${API}/api/canvas/${doc.id}/frame`}
           className="block w-full h-[200px] border-0 bg-transparent pointer-events-none"
         />
       </div>

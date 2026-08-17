@@ -396,6 +396,80 @@ app.post("/api/canvas", (req, res) => {
   }
 });
 
+// ── THE FRAME ────────────────────────────────────────────────────────────────
+// The composed document is served from HERE, over http, rather than handed to
+// the iframe as `srcdoc`. That is not a style choice, it is the only thing that
+// works inside the desktop app:
+//
+//   A srcdoc/data:/blob: frame INHERITS the embedding page's CSP. Tauri ships
+//   the app with `script-src 'self' 'wasm-unsafe-eval'` and no 'unsafe-inline',
+//   so every canvas document rendered as srcdoc arrived in the real app with
+//   NOTHING applied — no script, and no CSS whatsoever. It looked perfect in a
+//   browser, where no such parent policy exists, and completely dead in the
+//   product. A frame loaded from a real URL does not inherit; it carries the
+//   policy in its own header, which is the one below and is ours to set.
+//
+// The sandbox attribute on the iframe still does the security work: no
+// allow-same-origin, so this document has an opaque origin and cannot touch the
+// app. The CSP is what additionally denies it the network — including the
+// <img> beacon that the sandbox alone would happily allow.
+const ANIME_LIB = (() => {
+  try {
+    const p = path.join(path.dirname(fileURLToPath(import.meta.url)), "vendor", "anime.umd.min.js");
+    // A `</script>` inside an inlined script closes the tag early. Vanishingly
+    // unlikely in minified JS, but this is one line rather than an assumption.
+    return fs.readFileSync(p, "utf-8").replace(/<\/script/gi, "<\\/script");
+  } catch (e: any) {
+    console.warn("[canvas] anime.js not found — documents will render without it:", e.message);
+    return "";
+  }
+})();
+
+const CANVAS_FRAME_CSP =
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
+  "img-src data: blob:; font-src data:; media-src data: blob:";
+
+app.get("/api/canvas/:id/frame", (req, res) => {
+  const row: any = db
+    .prepare("SELECT html FROM canvas_docs WHERE id = ?")
+    .get(req.params.id);
+  if (!row) return res.status(404).type("text/plain").send("no such canvas document");
+
+  res.set({
+    "Content-Security-Policy": CANVAS_FRAME_CSP,
+    "Cache-Control": "no-store",
+    "Content-Type": "text/html; charset=utf-8",
+  });
+  res.send(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: transparent; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    color: #e7e5e4;
+  }
+  * { box-sizing: border-box; }
+</style>
+<script>${ANIME_LIB}</script>
+<script>
+  // Lift anime's exports to globals so a document can call animate(), stagger()
+  // or createTimeline() without knowing the namespace.
+  (function () {
+    var a = window.anime;
+    if (!a) return;
+    for (var k in a) { if (!(k in window)) { window[k] = a[k]; } }
+  })();
+</script>
+</head>
+<body>
+${row.html}
+</body>
+</html>`);
+});
+
 // Newest first — the UI shows [0] and walks forward through the history.
 app.get("/api/canvas", (_req, res) => {
   try {
