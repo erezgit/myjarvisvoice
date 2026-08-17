@@ -4,6 +4,7 @@ import { Heart, Copy, Download, Mic } from "lucide-react";
 import { VoicePlayerInline } from "./VoicePlayerInline";
 import { UnlikeConfirm } from "./UnlikeConfirm";
 import { ModelDownloadBanner } from "./ModelDownloadBanner";
+import { CanvasCard } from "./CanvasCard";
 
 type VoiceMessage = {
   id: number;
@@ -161,7 +162,13 @@ export function VoicePalPage() {
   });
 
   return (
-    <div className="relative flex h-full flex-col bg-background">
+    // min-h-full, NOT h-full. A sticky child can only travel inside its
+    // containing block, and h-full pinned this box to ONE viewport (933px)
+    // while the feed scrolled 41694px — so the pinned Canvas card and the
+    // autoplay toggle were both dragged off the top after a single screen of
+    // scrolling. min-h-full keeps the empty state full-height and lets the box
+    // grow with the feed, which is what makes the pin actually hold.
+    <div className="relative flex min-h-full flex-col bg-background">
       {/* Pinned transparent switch — stays fixed at the top while the feed scrolls
           underneath. The strip is transparent + pointer-events-none so only the
           switch shows and clicks fall through to the cards; the switch itself is
@@ -178,6 +185,11 @@ export function VoicePalPage() {
 
       {/* Model download flow — shows only until the local Kokoro model is present */}
       <ModelDownloadBanner />
+
+      {/* Jarvis's visual channel. Pinned above the agent cards and sticky, so it
+          stays put while the feed scrolls underneath. Renders nothing until
+          something has been pushed to it. */}
+      <CanvasCard />
 
       {/* Today's voice feed — sits below the floating switch with a comfortable gap
           so the first card clears the switch and the top breathes like the bottom. */}

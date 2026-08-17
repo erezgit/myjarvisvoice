@@ -95,6 +95,16 @@ async function synthesizeViaEngine(
 }
 
 app.use(cors());
+
+// Canvas documents are HTML, and HTML with an inline SVG or a base64 image runs
+// past body-parser's 100kb default — which fails as an HTML STACK TRACE from the
+// global parser before the route is ever reached, so the route's own size check
+// never runs and the caller gets a wall of markup instead of an error. Parse
+// /api/canvas with a wider limit FIRST; body-parser marks the request as read,
+// so the global parser below no-ops for it. The parser limit is deliberately
+// above the route's own CANVAS_MAX_BYTES so the clean JSON 413 is what fires.
+app.use("/api/canvas", express.json({ limit: "2mb" }));
+
 app.use(express.json());
 
 // =====================
@@ -313,6 +323,88 @@ app.post("/api/voice-preview-xai", async (req, res) => {
     const buffer = await synthesizeViaEngine(text, kokoroVoice, speed);
     res.set({ "Content-Type": "audio/wav", "Content-Length": buffer.length.toString() });
     res.send(buffer);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =====================
+// Canvas — the pinned visual card (Erez's design, 2026-08-17)
+// =====================
+//
+// Jarvis can say things and now it can SHOW things. An agent POSTs a
+// self-contained HTML document here; the app renders it in the one pinned card
+// at the top of the feed. The document runs inside
+// <iframe sandbox="allow-scripts"> WITHOUT allow-same-origin, so it lives in an
+// opaque origin: it can animate, and it cannot read the app, touch the
+// filesystem, or call home. That sandbox is the whole reason this endpoint is
+// safe to expose — it turns a text-only port into one that accepts CODE, and
+// the frame is what keeps the blast radius at "a rectangle that draws
+// something wrong". The composition + sandboxing happens in the UI
+// (CanvasCard.tsx); the server only stores the author's document verbatim.
+//
+// NOTE ON PLACEMENT: this must stay ABOVE the /api/:resource wildcard routes
+// further down, or "canvas" is treated as a generic table name and the POST
+// becomes a row insert that silently succeeds.
+db.exec(`CREATE TABLE IF NOT EXISTS canvas_docs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  html TEXT NOT NULL,
+  title TEXT DEFAULT NULL,
+  agent TEXT DEFAULT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+)`);
+
+// Keep the last N documents so Erez can step back through them.
+const CANVAS_KEEP = 20;
+// A card is ~1000x300 CSS px of hand-written HTML. A megabyte is already far
+// more than any real document and well under SQLite's limits; refusing loudly
+// beats storing something the WebView will choke on.
+const CANVAS_MAX_BYTES = 1_000_000;
+
+app.post("/api/canvas", (req, res) => {
+  const { html, title = null, agent = null } = req.body ?? {};
+
+  // Fail LOUDLY. voice-say.sh taught us this one: a wrapper that reports its
+  // own success hides the error, and the agent goes on believing it spoke.
+  if (typeof html !== "string" || !html.trim()) {
+    return res.status(400).json({ error: "html required (non-empty string)" });
+  }
+  const bytes = Buffer.byteLength(html, "utf8");
+  if (bytes > CANVAS_MAX_BYTES) {
+    return res.status(413).json({
+      error: `html too large: ${bytes} bytes, limit ${CANVAS_MAX_BYTES}`,
+    });
+  }
+
+  try {
+    const result = db
+      .prepare("INSERT INTO canvas_docs (html, title, agent) VALUES (?, ?, ?)")
+      .run(html, title, agent);
+
+    // Prune by id rather than by count-offset so concurrent pushes can't race
+    // into deleting the row that was just inserted.
+    db.prepare(
+      `DELETE FROM canvas_docs WHERE id NOT IN (
+         SELECT id FROM canvas_docs ORDER BY id DESC LIMIT ?
+       )`,
+    ).run(CANVAS_KEEP);
+
+    broadcast("canvas");
+    res.json({ id: result.lastInsertRowid, title, agent, bytes });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Newest first — the UI shows [0] and walks forward through the history.
+app.get("/api/canvas", (_req, res) => {
+  try {
+    const rows = db
+      .prepare(
+        "SELECT id, html, title, agent, created_at FROM canvas_docs ORDER BY id DESC LIMIT ?",
+      )
+      .all(CANVAS_KEEP);
+    res.json(rows);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1137,8 +1229,16 @@ function reapVoiceAudio(): void {
   }
 }
 
-app.listen(PORT, () => {
-  console.log(`SQLite API server running on http://localhost:${PORT}`);
+// ── BIND LOOPBACK ONLY ───────────────────────────────────────────────────────
+// app.listen(PORT) with no host binds 0.0.0.0/:: — measured as `TCP *:3001` in
+// lsof — so anything on the LAN could reach this API. That was already too
+// generous for a personal voice feed; with /api/canvas it would mean any device
+// on the network can put CODE on Erez's screen. 127.0.0.1 costs us nothing: the
+// UI calls localhost, and agents on the Tailormind box arrive through the
+// reverse SSH tunnel, which connects to localhost on THIS side.
+const HOST = process.env.API_HOST || "127.0.0.1";
+app.listen(PORT, HOST, () => {
+  console.log(`SQLite API server running on http://${HOST}:${PORT}`);
   console.log(`Database: ${process.env.DATA_DIR || "data"}/crm.db`);
   console.log(`Local voice engine: ${VOICE_ENGINE_URL}`);
   // Best-effort, slightly delayed so the engine has a moment to come up.
