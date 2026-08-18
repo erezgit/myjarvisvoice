@@ -62,12 +62,15 @@ export function CanvasCard() {
   const hasHistory = docs.length > 1;
 
   return (
-    <div className="sticky top-0 z-10 px-4 pt-3 pb-2 bg-background">
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+    // FULL BLEED. No px-4, no border, no rounded, no card background — the
+    // frame runs edge to edge of the window. Only the little header row keeps
+    // its padding so the label lines up with the feed cards underneath.
+    <div className="sticky top-0 z-10 pb-2 bg-background">
+      <div className="overflow-hidden">
         {/* Header. The right end used to be kept clear for the autoplay switch
             that floated over this corner; that control is a button in the bottom
             bar now, so the row gets its full width back. */}
-        <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1.5">
+        <div className="flex items-center gap-1.5 px-4 pt-3 pb-1.5">
           <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Canvas
           </span>
@@ -141,7 +144,12 @@ export function CanvasCard() {
              autoplay: true by default), so this attribute is the last gate. */
           allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
           src={`${FRAME_ORIGIN}/frame/${doc.id}`}
-          className="block w-full h-[200px] border-0 bg-transparent"
+          /* 16:9, not a fixed 200px. Edge-to-edge only makes the FRAME full
+             width — a 16:9 video inside a 2.2:1 box still fits by height and
+             leaves black bars down both sides. Matching the box to the video's
+             own ratio is what actually fills the window. Animated cards don't
+             care; they fill whatever box they are given. */
+          className="block w-full aspect-video border-0 bg-black"
         />
       </div>
     </div>
