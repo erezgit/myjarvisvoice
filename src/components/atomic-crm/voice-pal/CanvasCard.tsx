@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const API = "http://localhost:3001";
 // The frame comes from its OWN bare origin, not the API. See the long note in
@@ -59,50 +58,15 @@ export function CanvasCard() {
   if (!docs.length) return null;
 
   const doc = docs[Math.min(index, docs.length - 1)];
-  const hasHistory = docs.length > 1;
 
   return (
-    // FULL BLEED. No px-4, no border, no rounded, no card background — the
-    // frame runs edge to edge of the window. Only the little header row keeps
-    // its padding so the label lines up with the feed cards underneath.
+    // FULL BLEED, AND NO CHROME AT ALL. No padding, border, radius, card
+    // background or header — the frame is the only thing here, touching the top
+    // of the window. The CANVAS/title row that used to sit above it is gone at
+    // Erez's request; the history arrows went with it, since that row was the
+    // only place they lived.
     <div className="sticky top-0 z-10 pb-2 bg-background">
       <div className="overflow-hidden">
-        {/* Header. The right end used to be kept clear for the autoplay switch
-            that floated over this corner; that control is a button in the bottom
-            bar now, so the row gets its full width back. */}
-        <div className="flex items-center gap-1.5 px-4 pt-3 pb-1.5">
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Canvas
-          </span>
-          {doc.title && (
-            <span className="text-[12px] text-foreground truncate">{doc.title}</span>
-          )}
-          {hasHistory && (
-            <div className="flex items-center gap-0.5 ml-1 shrink-0">
-              {/* Older is FORWARD in the array (index 0 is newest). */}
-              <button
-                onClick={() => setIndex((i) => Math.min(i + 1, docs.length - 1))}
-                disabled={index >= docs.length - 1}
-                title="Older"
-                className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-[10px] text-muted-foreground tabular-nums">
-                {docs.length - index}/{docs.length}
-              </span>
-              <button
-                onClick={() => setIndex((i) => Math.max(i - 1, 0))}
-                disabled={index <= 0}
-                title="Newer"
-                className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* THE SANDBOX.
             allow-scripts + allow-same-origin, and nothing else — no allow-forms,
             no allow-popups, no allow-top-navigation.
