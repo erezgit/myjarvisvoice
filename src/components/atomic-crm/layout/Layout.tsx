@@ -1,6 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Home, Heart, Dog, Settings as SettingsIcon } from "lucide-react";
+import { Home, Heart, Volume2, VolumeX, Settings as SettingsIcon } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 import { Notification } from "@/components/admin/notification";
 import { Error } from "@/components/admin/error";
@@ -10,6 +10,7 @@ import { useUserStateTracker } from "../hooks/useUserStateTracker";
 import { useRealtimeRefresh } from "../hooks/useRealtimeRefresh";
 import { SettingsProvider } from "../chat/contexts/SettingsContext";
 import { MemberConfigProvider } from "../contexts/MemberConfigContext";
+import { useAutoplay } from "../voice-pal/autoplayStore";
 
 /**
  * My Jarvis Voice — compact desktop shell (Open Whisper style).
@@ -47,14 +48,15 @@ export const Layout = ({ children }: { children: ReactNode }) => {
 };
 
 /**
- * The only chrome in the app: two icon buttons, bottom-right. Each toggles —
- * tap to open Likes / Voice settings, tap again to return to the feed.
+ * The only chrome in the app, bottom-right: Home, Autoplay, Likes, Voice
+ * settings. The navigation ones toggle — tap to open, tap again to go back to
+ * the feed; Autoplay just flips a setting and stays put.
  */
 const BottomBar = () => {
   const navigate = useNavigate();
+  const [autoplay, setAutoplay] = useAutoplay();
   const { pathname } = useLocation();
   const onHome = pathname === "/voice-pal";
-  const onPal = pathname === "/voice-pal/pal";
   const onLikes = pathname === "/voice-pal/likes";
   const onVoices = pathname === "/voice-pal/voices";
   const go = (target: string, active: boolean) =>
@@ -74,18 +76,21 @@ const BottomBar = () => {
       >
         <Home className="h-4 w-4" />
       </button>
+      {/* Autoplay. Was a sliding switch floating over the top of the feed;
+          it is a button down here like everything else now — same 9x9 tile,
+          same border, colour is the only state it shows. */}
       <button
         type="button"
-        aria-label="Desktop Pal"
-        title="Desktop Pal"
-        onClick={() => go("/voice-pal/pal", onPal)}
+        aria-label={autoplay ? "Autoplay on" : "Autoplay off"}
+        title={autoplay ? "Autoplay on — new messages play themselves" : "Autoplay off — press play yourself"}
+        onClick={() => setAutoplay(!autoplay)}
         className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
-          onPal
-            ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
+          autoplay
+            ? "border-green-500/30 bg-green-500/10 text-green-500"
             : "border-border text-muted-foreground hover:bg-muted"
         }`}
       >
-        <Dog className="h-4 w-4" />
+        {autoplay ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
       </button>
       <button
         type="button"

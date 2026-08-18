@@ -5,6 +5,7 @@ import { VoicePlayerInline } from "./VoicePlayerInline";
 import { UnlikeConfirm } from "./UnlikeConfirm";
 import { ModelDownloadBanner } from "./ModelDownloadBanner";
 import { CanvasCard } from "./CanvasCard";
+import { useAutoplay } from "./autoplayStore";
 
 type VoiceMessage = {
   id: number;
@@ -72,29 +73,17 @@ function ExpandableText({ text }: { text: string }) {
   );
 }
 
-const AUTOPLAY_KEY = "mc-autoplay-enabled";
-
 export function VoicePalPage() {
   const [messages, setMessages] = useState<VoiceMessage[]>([]);
   const [unlikeId, setUnlikeId] = useState<number | null>(null);
   const [autoPlayId, setAutoPlayId] = useState<number | null>(null);
-  // Autoplay toggle — persisted, default ON (current behavior). When OFF, a new
-  // message still arrives but never auto-plays; Erez clicks its green play button.
-  const [autoPlayEnabled, setAutoPlayEnabled] = useState<boolean>(
-    () => localStorage.getItem(AUTOPLAY_KEY) !== "false",
-  );
+  // Autoplay lives in a shared store now — the control that flips it is the
+  // button in the bottom bar (Layout), which is a different subtree.
+  const [autoPlayEnabled] = useAutoplay();
   const latestIdRef = useRef<number>(0);
   // Ref mirror so the SSE fetch closure reads the LIVE toggle, not a stale capture.
   const autoPlayEnabledRef = useRef<boolean>(autoPlayEnabled);
   autoPlayEnabledRef.current = autoPlayEnabled;
-
-  const toggleAutoPlay = () => {
-    setAutoPlayEnabled((prev) => {
-      const next = !prev;
-      localStorage.setItem(AUTOPLAY_KEY, String(next));
-      return next;
-    });
-  };
 
   // The player is the single source of truth: when a NEW message arrives we flag
   // it so the inline player auto-plays it (sound + progress bar together).
@@ -164,25 +153,11 @@ export function VoicePalPage() {
   return (
     // min-h-full, NOT h-full. A sticky child can only travel inside its
     // containing block, and h-full pinned this box to ONE viewport (933px)
-    // while the feed scrolled 41694px — so the pinned Canvas card and the
-    // autoplay toggle were both dragged off the top after a single screen of
-    // scrolling. min-h-full keeps the empty state full-height and lets the box
-    // grow with the feed, which is what makes the pin actually hold.
+    // while the feed scrolled 41694px — so the pinned Canvas card was dragged
+    // off the top after a single screen of scrolling. min-h-full keeps the
+    // empty state full-height and lets the box grow with the feed, which is
+    // what makes the pin actually hold.
     <div className="relative flex min-h-full flex-col bg-background">
-      {/* Pinned transparent switch — stays fixed at the top while the feed scrolls
-          underneath. The strip is transparent + pointer-events-none so only the
-          switch shows and clicks fall through to the cards; the switch itself is
-          the one interactive element. */}
-      <div className="pointer-events-none sticky top-0 z-20 flex justify-end px-4 pt-4">
-        <button
-          onClick={toggleAutoPlay}
-          title={autoPlayEnabled ? "Autoplay on" : "Autoplay off"}
-          className={`pointer-events-auto relative inline-block w-9 h-5 rounded-full transition-colors ${autoPlayEnabled ? "bg-green-600" : "bg-muted"}`}
-        >
-          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${autoPlayEnabled ? "left-[18px]" : "left-0.5"}`} />
-        </button>
-      </div>
-
       {/* Model download flow — shows only until the local Kokoro model is present */}
       <ModelDownloadBanner />
 
@@ -191,8 +166,7 @@ export function VoicePalPage() {
           something has been pushed to it. */}
       <CanvasCard />
 
-      {/* Today's voice feed — sits below the floating switch with a comfortable gap
-          so the first card clears the switch and the top breathes like the bottom. */}
+      {/* Today's voice feed. */}
       <div className="flex-1 px-4 pb-4 space-y-2.5 pt-3">
         {todayMessages.map((msg) => (
           <div

@@ -425,22 +425,17 @@ const ANIME_LIB = (() => {
   }
 })();
 
+// frame-src is the ONLY relaxation, and it names one host. Everything else
+// stays at default-src 'none' — a canvas document still cannot fetch, XHR,
+// load an image from the network, or beacon anything out. It may now embed
+// a youtube-nocookie player and nothing else. No wildcard, no youtube.com.
 const CANVAS_FRAME_CSP =
   "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
-  "img-src data: blob:; font-src data:; media-src data: blob:";
+  "img-src data: blob:; font-src data:; media-src data: blob:; " +
+  "frame-src https://www.youtube-nocookie.com";
 
-app.get("/api/canvas/:id/frame", (req, res) => {
-  const row: any = db
-    .prepare("SELECT html FROM canvas_docs WHERE id = ?")
-    .get(req.params.id);
-  if (!row) return res.status(404).type("text/plain").send("no such canvas document");
-
-  res.set({
-    "Content-Security-Policy": CANVAS_FRAME_CSP,
-    "Cache-Control": "no-store",
-    "Content-Type": "text/html; charset=utf-8",
-  });
-  res.send(`<!doctype html>
+function composeCanvasFrame(html: string): string {
+  return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -465,9 +460,56 @@ app.get("/api/canvas/:id/frame", (req, res) => {
 </script>
 </head>
 <body>
-${row.html}
+${html}
 </body>
-</html>`);
+</html>`;
+}
+
+// Serve the composed document from BOTH origins.
+//
+//  * :3001/api/canvas/:id/frame — kept for curl and debugging.
+//  * :3007/frame/:id            — what the UI actually embeds, and the reason
+//                                 this second listener exists at all.
+//
+// WHY A SECOND PORT. A youtube-nocookie player will not run inside
+// sandbox="allow-scripts" alone: the sandbox forces an opaque origin on the
+// frame AND on everything nested inside it, and YouTube's player needs a real
+// one. Verified three ways side by side — allow-scripts alone renders black,
+// allow-scripts + allow-same-origin renders the player, no sandbox renders the
+// player. So the outer frame has to carry allow-same-origin.
+//
+// But "same origin" is only safe if the origin holds nothing. On :3001 it would
+// mean same-origin with the whole SQLite REST API — voice_messages, contacts,
+// kb_pages, every DELETE route — handed to whatever HTML an agent pushed. So
+// the frame moves to its own bare origin that serves exactly one GET and owns
+// no data. Now allow-same-origin grants the card same-origin access to... the
+// canvas documents it is already showing.
+//
+// 3002 is deliberately NOT used: the yt-bridge owns it, and the reverse tunnel
+// forwards it, so squatting there would take voice down with it.
+function canvasFrameHandler(req: any, res: any) {
+  const row: any = db
+    .prepare("SELECT html FROM canvas_docs WHERE id = ?")
+    .get(req.params.id);
+  if (!row) return res.status(404).type("text/plain").send("no such canvas document");
+  res.set({
+    "Content-Security-Policy": CANVAS_FRAME_CSP,
+    "Cache-Control": "no-store",
+    "Content-Type": "text/html; charset=utf-8",
+  });
+  res.send(composeCanvasFrame(row.html));
+}
+
+app.get("/api/canvas/:id/frame", canvasFrameHandler);
+
+const FRAME_PORT = parseInt(process.env.CANVAS_FRAME_PORT || "3007", 10);
+const frameApp = express();
+// No cors(), no json(), no static, no wildcard resource routes — one GET, and
+// anything else is a 404. That emptiness IS the security property.
+frameApp.get("/frame/:id", canvasFrameHandler);
+frameApp.use((_req, res) => res.status(404).type("text/plain").send("not found"));
+frameApp.listen(FRAME_PORT, "127.0.0.1", () => {
+  console.log(`Canvas frame origin on http://127.0.0.1:${FRAME_PORT}`);
 });
 
 // Newest first — the UI shows [0] and walks forward through the history.
