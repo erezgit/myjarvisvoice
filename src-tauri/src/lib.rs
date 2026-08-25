@@ -1,7 +1,8 @@
 use std::io::{BufReader, Cursor};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::mpsc::{channel, Sender};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use rodio::{Decoder, OutputStream, Sink};
 use tauri::{Emitter, Manager};
@@ -10,32 +11,70 @@ use tauri::tray::TrayIconBuilder;
 
 static MINI_MODE: AtomicBool = AtomicBool::new(false);
 
-#[tauri::command]
-fn play_audio(url: String) -> Result<(), String> {
-    std::thread::spawn(move || {
-        let bytes = reqwest::blocking::get(&url)
-            .and_then(|r| r.bytes())
-            .map_err(|e| format!("Failed to fetch audio: {}", e));
+// ─────────────────────────────────────────────────────────────────────────────
+// ONE AUDIO DEVICE, OPENED ONCE, FOR THE LIFE OF THE APP.
+//
+// ⛔ THE BUG THIS REPLACES: play_audio used to call `OutputStream::try_default()`
+// on EVERY message and drop the stream when the clip finished. macOS does not
+// reliably survive that churn — the first clip plays, the stream is dropped, and
+// the NEXT `try_default()` fails. And because the call was `.expect(...)`, that
+// failure PANICKED the spawned thread instead of returning an error. The panic
+// went to a stderr nobody reads, so the symptom was pure silence: the app spoke
+// once and then never again until it was restarted, which is the only thing that
+// reset CoreAudio. Erez reported exactly that, 26 Aug 2026.
+//
+// So the stream is opened ONCE and kept. `OutputStream` is !Send, so it cannot be
+// stored in Tauri's managed state and handed between threads — it has to stay on
+// the thread that made it. Hence one long-lived audio thread that owns the device
+// and takes work over a channel, rather than a thread per clip.
+//
+// Failures now RETURN rather than panic. A silent failure is the thing that made
+// this expensive to find; a player that cannot speak should say so.
+// ─────────────────────────────────────────────────────────────────────────────
 
-        match bytes {
-            Ok(data) => {
-                let (_stream, stream_handle) = OutputStream::try_default()
-                    .expect("Failed to open audio output");
-                let sink = Sink::try_new(&stream_handle)
-                    .expect("Failed to create audio sink");
-                let cursor = Cursor::new(data);
-                match Decoder::new(BufReader::new(cursor)) {
-                    Ok(source) => {
-                        sink.append(source);
-                        sink.sleep_until_end();
-                    }
-                    Err(e) => eprintln!("[audio] Decode error: {}", e),
-                }
+static AUDIO_TX: OnceLock<Sender<String>> = OnceLock::new();
+
+/// Start the single audio thread. Called once, from `setup`.
+fn init_audio() {
+    let (tx, rx) = channel::<String>();
+    if AUDIO_TX.set(tx).is_err() {
+        return; // already initialised
+    }
+    std::thread::spawn(move || {
+        // Opened once, and deliberately never dropped while the app lives:
+        // dropping `_stream` closes the device, which is the whole bug above.
+        let (_stream, stream_handle) = match OutputStream::try_default() {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("[audio] could not open the output device: {}", e);
+                return;
             }
-            Err(e) => eprintln!("[audio] {}", e),
+        };
+        // Clips are played one at a time, in arrival order. A queue rather than
+        // overlapping playback, because two agents speaking at once is noise.
+        for url in rx {
+            let data = match reqwest::blocking::get(&url).and_then(|r| r.bytes()) {
+                Ok(d) => d,
+                Err(e) => { eprintln!("[audio] fetch failed for {}: {}", url, e); continue; }
+            };
+            let sink = match Sink::try_new(&stream_handle) {
+                Ok(s) => s,
+                Err(e) => { eprintln!("[audio] sink failed: {}", e); continue; }
+            };
+            match Decoder::new(BufReader::new(Cursor::new(data))) {
+                Ok(source) => { sink.append(source); sink.sleep_until_end(); }
+                Err(e) => eprintln!("[audio] decode error: {}", e),
+            }
         }
     });
-    Ok(())
+}
+
+#[tauri::command]
+fn play_audio(url: String) -> Result<(), String> {
+    match AUDIO_TX.get() {
+        Some(tx) => tx.send(url).map_err(|e| format!("audio thread is gone: {}", e)),
+        None => Err("audio thread was never started".to_string()),
+    }
 }
 
 #[tauri::command]
@@ -125,6 +164,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![play_audio, toggle_mini_mode, get_mini_mode])
         .setup(|app| {
             let handle = app.handle().clone();
+
+            // Open the audio device once, here, rather than per message.
+            init_audio();
 
             // ── System tray icon ──
             let show_item = MenuItem::with_id(app, "show", "Show My Jarvis", true, None::<&str>)?;
