@@ -29,6 +29,7 @@
 
 import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { subscribeServerEvents } from "@/lib/serverEvents";
 
 const AUTOPLAY_KEY = "mc-autoplay-enabled";
 const EVENTS_URL = "http://localhost:3001/api/events";  // API prefix set below
@@ -91,10 +92,9 @@ export function VoiceAutoplayService() {
 
     void check();
 
-    // Push, for latency.
-    const es = new EventSource(EVENTS_URL);
-    es.onmessage = () => void check();
-    es.onerror = () => { /* EventSource reconnects on its own */ };
+    // Push, for latency. One shared socket for the whole app — see
+    // lib/serverEvents.ts for why this must never be a per-component one.
+    const unsubscribe = subscribeServerEvents(() => void check(), EVENTS_URL);
 
     // Pull, as the safety net. macOS throttles background timers rather than
     // stopping them, and SSE can sit half-open after a network change — a slow
@@ -103,7 +103,7 @@ export function VoiceAutoplayService() {
 
     return () => {
       alive = false;
-      es.close();
+      unsubscribe();
       clearInterval(poll);
     };
   }, []);

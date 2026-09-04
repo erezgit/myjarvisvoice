@@ -6,6 +6,7 @@ import { UnlikeConfirm } from "./UnlikeConfirm";
 import { ModelDownloadBanner } from "./ModelDownloadBanner";
 import { CanvasCard } from "./CanvasCard";
 import { useAutoplay } from "./autoplayStore";
+import { subscribeServerEvents } from "@/lib/serverEvents";
 
 type VoiceMessage = {
   id: number;
@@ -114,12 +115,9 @@ export function VoicePalPage() {
 
   useEffect(() => {
     fetchMessages(true);
-    const es = new EventSource("http://localhost:3001/api/events");
-    es.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.resource === "voice_messages") fetchMessages(false);
-    };
-    return () => es.close();
+    return subscribeServerEvents((resource) => {
+      if (resource === "voice_messages") fetchMessages(false);
+    });
   }, []);
 
   const handleLikeClick = (id: number, isLiked: boolean, e: React.MouseEvent) => {

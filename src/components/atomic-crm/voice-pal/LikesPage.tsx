@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Heart, Copy, Download } from "lucide-react";
 import { VoicePlayerInline } from "./VoicePlayerInline";
 import { UnlikeConfirm } from "./UnlikeConfirm";
+import { subscribeServerEvents } from "@/lib/serverEvents";
 
 type VoiceMessage = {
   id: number;
@@ -26,12 +27,9 @@ export function LikesPage() {
 
   useEffect(() => {
     fetchMessages();
-    const es = new EventSource("http://localhost:3001/api/events");
-    es.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.resource === "voice_messages") fetchMessages();
-    };
-    return () => es.close();
+    return subscribeServerEvents((resource) => {
+      if (resource === "voice_messages") fetchMessages();
+    });
   }, []);
 
   const handleUnlike = (id: number, e: React.MouseEvent) => {

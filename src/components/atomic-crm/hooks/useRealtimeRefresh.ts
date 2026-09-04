@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../providers/supabase/supabase";
+import { subscribeServerEvents } from "@/lib/serverEvents";
 
 const isSupabaseMode = import.meta.env.VITE_APP_MODE === "supabase";
 
@@ -66,24 +67,11 @@ export function useRealtimeRefresh() {
     const sseUrl = import.meta.env.DEV
       ? `${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/api/events`
       : "http://localhost:3001/api/events";
-    const eventSource = new EventSource(sseUrl);
-
-    eventSource.onmessage = (event) => {
-      try {
-        const { resource } = JSON.parse(event.data);
-        if (resource) {
-          queryClient.invalidateQueries({ queryKey: [resource] });
-          queryClient.invalidateQueries({
-            queryKey: [`${resource}_summary`],
-          });
-        }
-      } catch {
-        // ignore malformed messages
-      }
-    };
-
-    return () => {
-      eventSource.close();
-    };
+    // One shared socket per URL for the whole app. A per-hook EventSource is
+    // what exhausted the browser's six-per-origin budget — lib/serverEvents.ts.
+    return subscribeServerEvents((resource) => {
+      queryClient.invalidateQueries({ queryKey: [resource] });
+      queryClient.invalidateQueries({ queryKey: [`${resource}_summary`] });
+    }, sseUrl);
   }, [queryClient]);
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { subscribeServerEvents } from "@/lib/serverEvents";
 
 const API = "http://localhost:3001";
 // The frame comes from its OWN bare origin, not the API. See the long note in
@@ -44,15 +45,9 @@ export function CanvasCard() {
 
   useEffect(() => {
     fetchDocs();
-    const es = new EventSource(`${API}/api/events`);
-    es.onmessage = (e) => {
-      try {
-        if (JSON.parse(e.data).resource === "canvas") fetchDocs();
-      } catch {
-        /* ignore malformed frames */
-      }
-    };
-    return () => es.close();
+    return subscribeServerEvents((resource) => {
+      if (resource === "canvas") fetchDocs();
+    }, `${API}/api/events`);
   }, []);
 
   if (!docs.length) return null;
