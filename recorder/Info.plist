@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.myjarvisvoice.meeting-recorder</string>
+	<key>CFBundleName</key>
+	<string>MeetingRecorder</string>
+	<key>CFBundleExecutable</key>
+	<string>meeting-recorder</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.2</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>My Jarvis records your side of the meeting.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>My Jarvis records the other people in the meeting from the Mac's sound output.</string>
+</dict>
+</plist>

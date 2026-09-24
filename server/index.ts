@@ -63,6 +63,7 @@ loadServerConfig();
 import { exec } from "child_process";
 import db, { initSchema } from "./db.js";
 import { parseFilters } from "./filters.js";
+import { registerRecorderRoutes } from "./recorder.js";
 
 const app = express();
 const PORT = parseInt(process.env.API_PORT || "3001", 10);
@@ -106,6 +107,9 @@ app.use(cors());
 app.use("/api/canvas", express.json({ limit: "2mb" }));
 
 app.use(express.json());
+
+// Meeting recorder — before the generic /api/:resource routes, which would swallow it.
+registerRecorderRoutes(app);
 
 // =====================
 // SSE — push data-change notifications to connected browsers
