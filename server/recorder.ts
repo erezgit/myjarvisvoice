@@ -89,10 +89,11 @@ export function registerRecorderRoutes(app: Express) {
       await ensureWhisper();
       const title = (typeof req.body?.title === "string" && req.body.title.trim()) || `Recorded ${new Date().toLocaleString("en-GB")}`;
       const [row] = await sql(
+        // meetings.bot_id is UNIQUE — one recorder id per recording, all prefixed mjv-recorder.
         `INSERT INTO meetings (title, meeting_url, bot_id, status, started_at, notes)
-         VALUES ($1, 'local://mjv-recorder', 'mjv-recorder', 'recording', now(), 'Recorded on Erez''s Mac by My Jarvis Voice')
+         VALUES ($1, 'local://mjv-recorder', $2, 'recording', now(), 'Recorded on Erez''s Mac by My Jarvis Voice')
          RETURNING id`,
-        [title],
+        [title, `mjv-recorder-${Date.now()}`],
       );
       const meetingId = Number(row.id);
       const dir = path.join(ROOT, `${meetingId}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
