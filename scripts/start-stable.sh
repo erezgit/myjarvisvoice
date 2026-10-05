@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# STABLE launcher for My Jarvis Voice.
+# STABLE launcher for Tailormind Desktop.
 #
 # Unlike start-app.sh (which runs `tauri dev` and kills everything via a trap
 # when the launching shell dies), this starts each piece as its OWN detached
@@ -28,7 +28,7 @@ ENGINE_PY="${ENGINE_PY:-engine/.venv/bin/python}"
 # The PACKAGED app in /Applications is the current build (installed 2026-07-17).
 # The old `cargo build` debug binary no longer exists, which silently broke this
 # script (2026-07-25) — prefer the installed app, fall back to a debug build.
-BIN="/Applications/My Jarvis Voice.app/Contents/MacOS/tauri-app"
+BIN="/Applications/Tailormind Desktop.app/Contents/MacOS/tauri-app"
 [ -x "$BIN" ] || BIN="src-tauri/target/debug/tauri-app"
 
 up() { lsof -iTCP:"$1" -sTCP:LISTEN -n >/dev/null 2>&1; }

@@ -62,7 +62,7 @@ export function LoginPage() {
 
         {/* Title */}
         <h1 className="text-2xl font-bold text-center text-gray-900 mb-1">
-          My Jarvis Voice
+          Tailormind Desktop
         </h1>
         <p className="text-sm text-center text-gray-500 mb-8">
           Your AI voice companion

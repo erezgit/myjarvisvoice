@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create a local Python venv for the My Jarvis Voice engine and install deps.
+# Create a local Python venv for the Tailormind Desktop engine and install deps.
 #
 # kokoro-onnx / onnxruntime publish wheels for Python 3.10–3.12 only, so we pick
 # a compatible interpreter automatically — the system `python3` is often 3.13+,
@@ -22,7 +22,7 @@ pick_python() {
 
 PYTHON="$(pick_python)"
 if [ -z "$PYTHON" ]; then
-  echo "ERROR: My Jarvis Voice needs Python 3.10, 3.11, or 3.12 (kokoro-onnx / onnxruntime wheels)."
+  echo "ERROR: Tailormind Desktop needs Python 3.10, 3.11, or 3.12 (kokoro-onnx / onnxruntime wheels)."
   echo "Your default python3 is: $(python3 --version 2>&1 || echo 'not found')"
   echo
   echo "Install a compatible version, e.g.:"

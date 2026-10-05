@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# Launch My Jarvis Voice as the NATIVE DESKTOP APP (Tauri).
+# Launch Tailormind Desktop as the NATIVE DESKTOP APP (Tauri).
 #
 #   This is the ONLY supported way to run the app. Do NOT open it as a web page
 #   in a browser (http://localhost:1420 is an internal dev URL for the desktop
@@ -20,7 +20,7 @@ cd "$ROOT"
 # The desktop shell is built with Rust. Without cargo there is no app to open —
 # do NOT fall back to a browser; install Rust instead.
 if ! command -v cargo >/dev/null 2>&1; then
-  echo "ERROR: the My Jarvis Voice desktop app is built with Rust, but 'cargo' was not found."
+  echo "ERROR: the Tailormind Desktop desktop app is built with Rust, but 'cargo' was not found."
   echo "Install the Rust toolchain, then re-run this script:"
   echo "    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
   echo "    (open a new shell so 'cargo' is on PATH)"

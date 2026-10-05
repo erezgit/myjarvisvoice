@@ -90,7 +90,7 @@ function ModalContent({
           </svg>
         </div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">You&apos;re all set!</h2>
-        <p className="text-gray-500 text-sm mb-6">Enjoy unlimited access to My Jarvis Voice.</p>
+        <p className="text-gray-500 text-sm mb-6">Enjoy unlimited access to Tailormind Desktop.</p>
         <button
           onClick={onClose}
           className="bg-blue-600 text-white rounded-xl px-6 py-2.5 text-sm font-semibold hover:bg-blue-700 transition-colors"

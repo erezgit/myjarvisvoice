@@ -1,4 +1,4 @@
-# My Jarvis Voice
+# Tailormind Desktop
 
 A lightweight, **fully local** desktop voice app. It pairs a clean home‑feed UI
 (a fork of the *Tori* desktop app) with a **bundled, offline Kokoro text‑to‑speech
@@ -33,7 +33,7 @@ Everything talks locally:
 
 ## Quick start — the desktop app
 
-> **My Jarvis Voice is a native desktop app. Run it as the app — not in a
+> **Tailormind Desktop is a native desktop app. Run it as the app — not in a
 > browser.** `http://localhost:1420` is an internal dev URL the desktop shell
 > loads from; it is not the product. The product is the **native window**.
 
@@ -41,8 +41,8 @@ Requirements: **Node 18+**, **Python 3.10–3.12**, **Rust toolchain (`cargo`)**
 for the desktop shell, macOS (the engine plays via `afplay`).
 
 ```bash
-git clone https://github.com/erezgit/myjarvisvoice.git
-cd myjarvisvoice
+git clone https://github.com/erezgit/tailormind-desktop.git
+cd tailormind-desktop
 
 # 1. JS deps
 npm install

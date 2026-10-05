@@ -1,4 +1,4 @@
-# My Jarvis Voice — local engine test evidence
+# Tailormind Desktop — local engine test evidence
 Date: יום ג׳ יוני 23 2026 23:09:57 IDT
 
 ## GET /health

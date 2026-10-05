@@ -14,7 +14,7 @@ import { useAutoplay } from "../voice-pal/autoplayStore";
 import { useRecorder } from "../voice-pal/recorderStore";
 
 /**
- * My Jarvis Voice — compact desktop shell (Open Whisper style).
+ * Tailormind Desktop — compact desktop shell (Open Whisper style).
  *
  * One small window: the voice feed fills the body, a slim bottom bar holds the
  * only two controls — Likes and Voice settings. No sidebar, no chat panel, no
@@ -51,7 +51,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
 /**
  * The only chrome in the app, bottom-right: Recordings, Home, Autoplay,
  * Likes, Voice settings. Record itself lives at the top of the Recordings page
- * (Erez, 6 Oct); the list button glows red while a recording runs. The navigation ones toggle — tap to open, tap again to go back to
+ * (Erez, 6 Oct); the list button glows green while a recording runs. The navigation ones toggle — tap to open, tap again to go back to
  * the feed; Autoplay just flips a setting and stays put.
  */
 const BottomBar = () => {
@@ -75,7 +75,7 @@ const BottomBar = () => {
         onClick={() => go("/voice-pal/recordings", onRecordings)}
         className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
           rec.recording
-            ? "border-red-500/40 bg-red-500/15 text-red-500"
+            ? "border-green-500/40 bg-green-500/15 text-green-500"
             : onRecordings
               ? "border-border bg-muted text-foreground"
               : "border-border text-muted-foreground hover:bg-muted"

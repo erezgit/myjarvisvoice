@@ -3,7 +3,7 @@ import { Mars, NonBinary, Venus } from "lucide-react";
 export const defaultDarkModeLogo = "./logos/logo_jarvis_dark.svg";
 export const defaultLightModeLogo = "./logos/logo_jarvis_light.svg";
 
-export const defaultTitle = "My Jarvis Voice";
+export const defaultTitle = "Tailormind Desktop";
 
 export const defaultNoteStatuses = [
   { value: "draft", label: "Draft", color: "#8b949e" },

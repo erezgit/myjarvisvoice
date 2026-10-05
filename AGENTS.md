@@ -1,7 +1,7 @@
 # AGENTS.md — run the desktop app and talk to the user through it
 
 You are a coding agent on the **user's Mac**. Your job is **not** to run a
-one-off engine test. Your job is to **launch the My Jarvis Voice desktop app,
+one-off engine test. Your job is to **launch the Tailormind Desktop desktop app,
 open its window, and start a live voice conversation with the user through it** —
 beginning with a "can you hear me?" handshake.
 
@@ -52,7 +52,7 @@ a card in the app's feed and plays through the speakers:
 ```bash
 curl -X POST http://localhost:3001/api/voice \
   -H 'content-type: application/json' \
-  -d '{"message":"Hi, I am running inside the My Jarvis Voice app on your Mac. Can you hear me through the app?","voice":"am_echo","agent":"jarvis"}'
+  -d '{"message":"Hi, I am running inside the Tailormind Desktop app on your Mac. Can you hear me through the app?","voice":"am_echo","agent":"jarvis"}'
 ```
 
 **Your FIRST message must ask: "Can you hear me through the app?"**
@@ -60,7 +60,7 @@ curl -X POST http://localhost:3001/api/voice \
 The greeting **plays automatically** through the Mac's speakers (the server
 speaks it natively — no click needed) and also appears as a card in the window.
 Then **STOP and wait for the user to confirm** they heard it. Tell them in your
-terminal output to look at the My Jarvis Voice window and listen.
+terminal output to look at the Tailormind Desktop window and listen.
 
 - ✅ **User says "yes, I can hear you"** → the app works. Continue the
   conversation from here, speaking each reply through `POST /api/voice` (they

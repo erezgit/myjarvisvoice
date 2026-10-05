@@ -1,5 +1,5 @@
 /**
- * Local single-user auth shim for My Jarvis Voice (open-source offline build).
+ * Local single-user auth shim for Tailormind Desktop (open-source offline build).
  *
  * The original cloud app authenticated against Supabase (Google OAuth + email).
  * This fork is fully offline with no accounts and no keys, so we expose the

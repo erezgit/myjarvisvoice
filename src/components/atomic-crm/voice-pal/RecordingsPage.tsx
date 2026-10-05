@@ -39,24 +39,51 @@ export function RecordingsPage() {
   const rec = useRecorder();
   const [list, setList] = useState<Recording[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [more, setMore] = useState(false);       // another page exists
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PAGE = 20;
 
+  const fetchPage = async (before?: number): Promise<Recording[]> => {
+    const r = await fetch(`http://localhost:3001/api/record/list?limit=${PAGE}${before ? `&before=${before}` : ""}`);
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+    return body;
+  };
+
+  // The first page refreshes while the page is open, so a recording that is still
+  // transcribing shows its count growing. Pages already loaded below it stay as they are.
   useEffect(() => {
     let cancelled = false;
     const load = () =>
-      fetch("http://localhost:3001/api/record/list")
-        .then(async (r) => {
-          const body = await r.json();
+      fetchPage()
+        .then((first) => {
           if (cancelled) return;
-          if (!r.ok) { setError(body.error || `HTTP ${r.status}`); return; }
           setError(null);
-          setList(body);
+          setList((prev) => {
+            const older = (prev ?? []).filter((p) => Number(p.id) < Math.min(...first.map((f) => Number(f.id))));
+            return [...first, ...older];
+          });
+          setMore((m) => m || first.length === PAGE);
         })
         .catch((e) => !cancelled && setError(e?.message || "could not load recordings"));
     load();
-    // Refresh while open, so a recording that is still transcribing shows its count growing.
     const t = setInterval(load, 5000);
     return () => { cancelled = true; clearInterval(t); };
   }, [rec.recording]);
+
+  const loadMore = async () => {
+    if (!list?.length || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await fetchPage(Number(list[list.length - 1].id));
+      setList([...list, ...page]);
+      setMore(page.length === PAGE);
+    } catch (e: any) {
+      setError(e?.message || "could not load more");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <div className="flex min-h-full flex-col bg-background">
@@ -64,7 +91,7 @@ export function RecordingsPage() {
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium text-foreground">Recordings</div>
           <div className="text-[11px] text-muted-foreground">
-            {list ? `${list.length} recording${list.length === 1 ? "" : "s"}` : "Loading…"}
+            {list ? `${list.length}${more ? "+" : ""} recording${list.length === 1 ? "" : "s"}` : "Loading…"}
           </div>
         </div>
         <RecordButton />
@@ -88,7 +115,7 @@ export function RecordingsPage() {
               className="flex w-full items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left transition-colors hover:border-muted-foreground/30"
             >
               <span
-                className={`h-2.5 w-2.5 shrink-0 rounded-full ${live ? "animate-pulse bg-red-500" : "bg-muted-foreground/30"}`}
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${live ? "animate-pulse bg-green-500" : "bg-muted-foreground/30"}`}
               />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-foreground">{when(r.started_at)}</div>
@@ -101,6 +128,16 @@ export function RecordingsPage() {
             </button>
           );
         })}
+        {more && (
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="w-full rounded-xl border border-border py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-60"
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+        )}
         {list && list.length === 0 && (
           <div className="py-24 text-center">
             <div className="mb-3 text-4xl">🎙️</div>

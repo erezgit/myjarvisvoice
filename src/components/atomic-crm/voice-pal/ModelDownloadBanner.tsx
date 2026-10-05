@@ -108,7 +108,7 @@ export function ModelDownloadBanner() {
                 ? "Local voice engine unreachable — start the engine, then refresh."
                 : isDownloading
                 ? `${fmtMB(progress!.downloaded)} / ${progress!.total ? fmtMB(progress!.total) : "~350 MB"}`
-                : "My Jarvis Voice needs the Kokoro model (~350 MB) to speak. One-time download."}
+                : "Tailormind Desktop needs the Kokoro model (~350 MB) to speak. One-time download."}
             </p>
           </div>
           {!isDownloading && reachable && (

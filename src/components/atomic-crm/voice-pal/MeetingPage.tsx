@@ -110,7 +110,7 @@ export function MeetingPage() {
           <ChevronLeft className="h-4 w-4" />
         </button>
         <span
-          className={`h-2.5 w-2.5 shrink-0 rounded-full ${isLive ? "animate-pulse bg-red-500" : "bg-muted-foreground/40"}`}
+          className={`h-2.5 w-2.5 shrink-0 rounded-full ${isLive ? "animate-pulse bg-green-500" : "bg-muted-foreground/40"}`}
         />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-foreground">{meeting?.title ?? "Meeting"}</div>

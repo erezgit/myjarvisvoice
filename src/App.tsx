@@ -21,6 +21,6 @@ import { CRM } from "@/components/atomic-crm/root/CRM";
  *    />
  * );
  */
-const App = () => <CRM title="My Jarvis OS" />;
+const App = () => <CRM title="Tailormind Desktop" />;
 
 export default App;

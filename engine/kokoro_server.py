@@ -1,4 +1,4 @@
-"""My Jarvis Voice — local Kokoro TTS engine.
+"""Tailormind Desktop — local Kokoro TTS engine.
 
 A zero-config, offline text-to-speech HTTP server built on the open-weight
 Kokoro-82M model (Apache-2.0). This is the *agent integration seam*: any
@@ -272,7 +272,7 @@ def start_download() -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "MyJarvisVoice/1.0"
+    server_version = "TailormindDesktop/1.0"
 
     def log_message(self, *args):  # quieter logs
         sys.stderr.write("[engine] " + (args[0] % args[1:]) + "\n")
@@ -361,13 +361,13 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="My Jarvis Voice — local Kokoro engine")
+    ap = argparse.ArgumentParser(description="Tailormind Desktop — local Kokoro engine")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     print(
-        f"[engine] My Jarvis Voice on http://{args.host}:{args.port} "
+        f"[engine] Tailormind Desktop on http://{args.host}:{args.port} "
         f"(model_ready={model_ready()}, model_dir={model_dir()})",
         flush=True,
     )

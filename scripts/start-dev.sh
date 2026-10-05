@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the full My Jarvis Voice stack for local development:
+# Start the full Tailormind Desktop stack for local development:
 #   1) local Kokoro engine (port 8787)
 #   2) SQLite API server   (port 3001)
 #   3) Vite frontend       (Tauri dev URL / browser)

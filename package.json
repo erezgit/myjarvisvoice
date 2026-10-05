@@ -1,8 +1,8 @@
 {
-  "name": "myjarvisvoice",
+  "name": "tailormind-desktop",
   "private": true,
   "version": "1.0.0",
-  "description": "My Jarvis Voice — a fully local, open-source desktop voice app with a bundled Kokoro TTS engine. Offline, no keys.",
+  "description": "Tailormind Desktop — a fully local, open-source desktop voice app with a bundled Kokoro TTS engine. Offline, no keys.",
   "license": "MIT",
   "type": "module",
   "scripts": {

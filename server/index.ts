@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 /**
  * Load OPTIONAL local configuration.
  *
- * My Jarvis Voice runs fully offline with zero required configuration, so this
+ * Tailormind Desktop runs fully offline with zero required configuration, so this
  * only reads optional overrides (e.g. API_PORT, VOICE_ENGINE_URL) from a local
  * .env if one exists. It never reads from or migrates any machine-wide secrets
  * file, and there are no cloud keys to load.
@@ -612,7 +612,7 @@ app.patch("/api/voice_messages/:id/like", (req, res) => {
 });
 
 // =====================
-// PayPal / paywall routes removed — My Jarvis Voice is free and offline.
+// PayPal / paywall routes removed — Tailormind Desktop is free and offline.
 // (The original cloud app gated usage behind a PayPal checkout; the
 // open-source build has no paywall and no payment credentials.)
 // =====================
@@ -1272,7 +1272,7 @@ async function seedVoiceFeed(): Promise<void> {
   const count = (db.prepare("SELECT COUNT(*) AS n FROM voice_messages").get() as any).n;
   if (count > 0) return;
   const demo = [
-    { message: "Welcome to My Jarvis Voice — a fully local, open-source voice app. Everything you hear is synthesized on this machine with Kokoro. No cloud, no keys.", voice: "am_echo", agent: "jarvis" },
+    { message: "Welcome to Tailormind Desktop — a fully local, open-source voice app. Everything you hear is synthesized on this machine with Kokoro. No cloud, no keys.", voice: "am_echo", agent: "jarvis" },
     { message: "Atlas here. Send any text to the local API and I will speak it through your Mac's speakers.", voice: "am_onyx", agent: "atlas" },
     { message: "Nova reporting. Pick an agent in Settings to change my voice. Echo, Onyx, Fable, and Nova are all available offline.", voice: "af_nova", agent: "nova" },
     { message: "This is Ben. The model files download once, about three hundred fifty megabytes, then voice works forever without a connection.", voice: "bm_fable", agent: "ben" },

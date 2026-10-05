@@ -4,7 +4,7 @@
 //   POST /api/record/stop                → { meeting_id, dir }
 //   GET  /api/record/status              → { recording, meeting_id?, chunks, transcribed, last_meeting_id? }
 //   GET  /api/record/transcript?meeting_id=&after=  → { meeting, rows } — the app's live panel
-//   GET  /api/record/list                → [{ id, title, status, started_at, ended_at, lines }] — newest first
+//   GET  /api/record/list?limit=20&before=<id>  → [{ id, title, status, started_at, ended_at, lines }] — newest first, a page
 //
 // Agents on the Tailormind box reach these through the same reverse tunnel as
 // /api/voice. Recording = recorder/build/MeetingRecorder.app (mic + system audio,
@@ -155,7 +155,7 @@ export function registerRecorderRoutes(app: Express, broadcast: (resource: strin
       const [row] = await sql(
         // meetings.bot_id is UNIQUE — one recorder id per recording, all prefixed mjv-recorder.
         `INSERT INTO meetings (title, meeting_url, bot_id, status, started_at, notes)
-         VALUES ($1, 'local://mjv-recorder', $2, 'recording', now(), 'Recorded on Erez''s Mac by My Jarvis Voice')
+         VALUES ($1, 'local://mjv-recorder', $2, 'recording', now(), 'Recorded on Erez''s Mac by Tailormind Desktop')
          RETURNING id`,
         [title, `mjv-recorder-${Date.now()}`],
       );
@@ -211,13 +211,16 @@ export function registerRecorderRoutes(app: Express, broadcast: (resource: strin
   });
 
   // Every recording made on this Mac, newest first — the app's Recordings page.
-  app.get("/api/record/list", async (_req, res) => {
+  app.get("/api/record/list", async (req, res) => {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const before = Number(req.query.before) || 2147483647;   // a page: ids below the last one shown
     try {
       const rows = await sql(
         `SELECT m.id, m.title, m.status, m.started_at, m.ended_at, count(t.id)::int AS lines
            FROM meetings m LEFT JOIN meeting_transcript t ON t.meeting_id = m.id
-          WHERE m.bot_id LIKE 'mjv-recorder%'
-          GROUP BY m.id ORDER BY m.id DESC LIMIT 500`,
+          WHERE m.bot_id LIKE 'mjv-recorder%' AND m.id < $1
+          GROUP BY m.id ORDER BY m.id DESC LIMIT $2`,
+        [before, limit],
       );
       res.json(rows);
     } catch (e: any) {
