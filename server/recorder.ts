@@ -28,7 +28,9 @@ const WHISPER_URL = "http://127.0.0.1:8178";
 const WHISPER_BIN = "/opt/homebrew/bin/whisper-server";
 const WHISPER_MODEL = path.join(os.homedir(), "Library/Application Support/ru.starmel.OpenSuperWhisper/whisper-models/ggml-large-v3-turbo.bin");
 const VAD_MODEL = "/Applications/OpenSuperWhisper.app/Contents/Resources/ggml-silero-v5.1.2.bin";
-const CHUNK_SECONDS = "20";
+// 10 s target, cut at the quietest 100 ms in the 4 s before it — so every chunk
+// ends at a pause between 6 and 10 s (Erez, 6 Oct: "25 seconds is really a lot").
+const CHUNK_SECONDS = "10";
 
 let current: { meetingId: number; dir: string } | null = null;
 // The panel keeps showing a meeting after Stop — the transcriber is still

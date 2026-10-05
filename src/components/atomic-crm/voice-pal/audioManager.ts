@@ -28,9 +28,6 @@
  */
 
 const audio = new Audio();
-// Lets the analyser read the cross-origin (:3001) stream once the graph exists;
-// the voice server sends Access-Control-Allow-Origin: *, so it is not tainted.
-audio.crossOrigin = "anonymous";
 
 // ── Listeners ───────────────────────────────────────────────────────────────
 type Listener = () => void;
@@ -75,99 +72,19 @@ audio.addEventListener("stalled", () => {
   console.warn("[audioManager] stalled on", audio.src);
 });
 
-// ── Optional analyser graph (for the 3D Pal) ────────────────────────────────
-// Built ONLY when the AudioContext is already running. See hazard 1 above.
-let audioCtx: AudioContext | null = null;
-let analyser: AnalyserNode | null = null;
-let ampBuf: Uint8Array | null = null;
-let graphReady = false;
-let graphImpossible = false;
+// ── No Web Audio graph — ever (6 Oct 2026) ──────────────────────────────────
+// There used to be an analyser here, built on first play with
+// createMediaElementSource(), so the 3D Pal's mouth could follow the voice.
+// That routing is IRREVERSIBLE: from then on every message had to go through
+// an AudioContext that macOS suspends whenever the window is idle or
+// unfocused, and the "wake it before playing" fix (await ctx.resume()) can
+// wait forever without a user gesture — so play() was never even called.
+// Erez's symptom, again on 6 Oct: the first message plays, the next ones are
+// silent until the app is refreshed (a refresh is a fresh element, no graph).
+// The avatar was removed in August and nothing reads the analyser any more, so
+// the graph goes: the element stays wired straight to the speakers for good.
 let smoothedAmp = 0;
 let smoothedWide = 0;
-
-function getCtx(): AudioContext | null {
-  if (audioCtx) return audioCtx;
-  try {
-    const Ctx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
-    audioCtx = new Ctx();
-  } catch {
-    graphImpossible = true;
-  }
-  return audioCtx;
-}
-
-/**
- * Try to build the analyser graph. Safe to call every frame — it is a no-op
- * once built, once proven impossible, or while the context is still suspended.
- * Crucially it does NOT rewire the element while suspended, because doing so
- * would silence playback.
- */
-function tryBuildGraph(): void {
-  if (graphReady || graphImpossible) return;
-  const ctx = getCtx();
-  if (!ctx) return;
-
-  if (ctx.state !== "running") {
-    // Ask politely; a gesture-less resume may be refused, and that is fine —
-    // we simply leave the element wired straight to the speakers.
-    ctx.resume().catch(() => {});
-    return;
-  }
-
-  try {
-    const source = ctx.createMediaElementSource(audio);
-    analyser = ctx.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.5;
-    ampBuf = new Uint8Array(analyser.frequencyBinCount);
-    source.connect(analyser);
-    analyser.connect(ctx.destination);
-    graphReady = true;
-  } catch {
-    // createMediaElementSource throws if called twice on one element. Never
-    // retry — a failed attempt must not leave audio half-routed.
-    graphImpossible = true;
-  }
-}
-
-/**
- * Keep a BUILT graph audible. This is the other half of hazard 1 and the half
- * that was missing.
- *
- * `tryBuildGraph()` cannot do this job: its first line returns the moment
- * `graphReady` is true, so the `ctx.resume()` below it — the only resume in the
- * module — is unreachable for the rest of the session. Once the graph exists
- * the element is IRREVERSIBLY routed through the context, and macOS suspends a
- * context whenever the app is backgrounded, blurred, or simply idle. The result
- * is the exact reported symptom: the FIRST message plays (the click is a
- * gesture, the context resumes, the graph gets built), and every LATER message
- * is silent while the element cheerfully reports playing and currentTime
- * advances into a stalled graph.
- *
- * So: before every play, if the graph is live and the context has gone to
- * sleep, wake it.
- */
-function ensureCtxRunning(): void {
-  if (!graphReady || !audioCtx) return;
-  if (audioCtx.state === "suspended") {
-    audioCtx.resume().catch(() => {
-      console.warn("[audioManager] could not resume a suspended AudioContext");
-    });
-  }
-}
-
-// The context is suspended by the OS on blur/background, so wake it the moment
-// we come back rather than waiting for the next play() — otherwise an auto-play
-// that fires while returning to the app is silent.
-if (typeof document !== "undefined") {
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) ensureCtxRunning();
-  });
-  window.addEventListener("focus", ensureCtxRunning);
-}
 
 function matches(src: string): boolean {
   return audio.src === src || audio.src.endsWith(src);
@@ -176,17 +93,11 @@ function matches(src: string): boolean {
 export const audioManager = {
   /** Play a URL from the start (or resume if it is already the current one). */
   play(src: string) {
-    // A suspended context silences a built graph completely. Wake it FIRST —
-    // after play() would leave this message inaudible and only fix the next.
-    ensureCtxRunning();
     if (!matches(src)) audio.src = src;
     audio.play().catch((err) => {
       console.warn("[audioManager] play() rejected for", src, err?.message);
       notify();
     });
-    // Attempt the graph AFTER starting playback, never before — and only if the
-    // context is already running, so this can never mute the message.
-    tryBuildGraph();
   },
 
   pause() {
@@ -262,22 +173,11 @@ export const audioManager = {
       smoothedAmp *= 0.8;
       return smoothedAmp;
     }
-    tryBuildGraph();
-    if (!analyser || !ampBuf) {
-      // No analyser (context never resumed). Keep the Pal alive with a soft
-      // oscillation driven by playback position — never a frozen face.
-      const t = audio.currentTime;
-      const target = 0.35 + 0.25 * Math.abs(Math.sin(t * 9));
-      smoothedAmp += (target - smoothedAmp) * 0.3;
-      return smoothedAmp;
-    }
-    analyser.getByteFrequencyData(ampBuf);
-    let sum = 0;
-    for (let i = 0; i < ampBuf.length; i++) sum += ampBuf[i];
-    const avg = sum / ampBuf.length / 255;
-    const target = Math.min(1, avg * 2.6);
-    // Attack fast, release a touch slower — reads like speech.
-    smoothedAmp += (target - smoothedAmp) * (target > smoothedAmp ? 0.6 : 0.25);
+    // No analyser (see the note at the top): a soft oscillation driven by
+    // playback position, so anything that animates to the voice still moves.
+    const t = audio.currentTime;
+    const target = 0.35 + 0.25 * Math.abs(Math.sin(t * 9));
+    smoothedAmp += (target - smoothedAmp) * 0.3;
     return smoothedAmp;
   },
 
@@ -287,20 +187,7 @@ export const audioManager = {
    */
   getMouth(): { open: number; wide: number } {
     const open = audioManager.getAmplitude();
-    if (!audioManager.isPlaying() || !analyser || !ampBuf) {
-      smoothedWide *= 0.85;
-      return { open, wide: smoothedWide };
-    }
-    // ampBuf was just filled by getAmplitude(). Split low vs high energy.
-    const n = ampBuf.length;
-    const mid = Math.floor(n * 0.35);
-    let lo = 0,
-      hi = 0;
-    for (let i = 0; i < n; i++) (i < mid ? (lo += ampBuf[i]) : (hi += ampBuf[i]));
-    const total = lo + hi;
-    const tilt = total > 0 ? hi / total : 0; // 0 = all low (round) → 1 = high (wide)
-    const target = Math.min(1, Math.max(0, (tilt - 0.25) * 2.2));
-    smoothedWide += (target - smoothedWide) * 0.3;
+    smoothedWide *= 0.85;
     return { open, wide: smoothedWide };
   },
 

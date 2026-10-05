@@ -10,8 +10,8 @@ import { RecordButton } from "./RecordButton";
  *   /voice-pal/recordings/:id   — any past recording, opened from the Recordings list
  * Either way it polls, so a recording still being transcribed keeps filling.
  *
- * The transcriber works in ~20 s chunks per track (mic = Erez, system audio =
- * the others), so lines arrive about 25 s behind the speech and the two tracks
+ * The transcriber works in 6–10 s chunks per track (mic = Erez, system audio =
+ * the others), so lines arrive about 10–15 s behind the speech and the two tracks
  * land out of order — they are sorted by start time here, never by arrival.
  */
 type Row = {
@@ -112,7 +112,7 @@ export function MeetingPage() {
           <div className="truncate text-sm font-medium text-foreground">{meeting?.title ?? "Meeting"}</div>
           <div className="text-[11px] text-muted-foreground">
             {isLive
-              ? `Recording · ${rec.transcribed ?? 0} of ${rec.chunks ?? 0} pieces transcribed · about 25 s behind`
+              ? `Recording · ${rec.transcribed ?? 0} of ${rec.chunks ?? 0} pieces transcribed · about 10–15 s behind`
               : finishing
                 ? "Stopped · transcribing the last pieces"
                 : meeting
@@ -165,7 +165,7 @@ export function MeetingPage() {
           <div className="py-24 text-center">
             <div className="mb-3 text-4xl">🎙️</div>
             <p className="text-sm text-muted-foreground">
-              {isLive ? "Listening — the first lines appear in about 25 seconds" : "No transcript yet"}
+              {isLive ? "Listening — the first lines appear in about 15 seconds" : "No transcript yet"}
             </p>
           </div>
         )}
