@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { ChevronRight } from "lucide-react";
 import { useRecorder } from "./recorderStore";
+import { RecordButton } from "./RecordButton";
 
 /**
  * Every recording made on this Mac, newest first. Each Record → Stop is one
@@ -59,12 +60,18 @@ export function RecordingsPage() {
 
   return (
     <div className="flex min-h-full flex-col bg-background">
-      <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="text-sm font-medium text-foreground">Recordings</div>
-        <div className="text-[11px] text-muted-foreground">
-          {list ? `${list.length} recording${list.length === 1 ? "" : "s"}` : "Loading…"}
+      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium text-foreground">Recordings</div>
+          <div className="text-[11px] text-muted-foreground">
+            {list ? `${list.length} recording${list.length === 1 ? "" : "s"}` : "Loading…"}
+          </div>
         </div>
+        <RecordButton />
       </div>
+      {rec.error && (
+        <div className="mx-4 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-500">{rec.error}</div>
+      )}
 
       {error && (
         <div className="mx-4 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-500">{error}</div>
@@ -97,7 +104,7 @@ export function RecordingsPage() {
         {list && list.length === 0 && (
           <div className="py-24 text-center">
             <div className="mb-3 text-4xl">🎙️</div>
-            <p className="text-sm text-muted-foreground">No recordings yet — press Record</p>
+            <p className="text-sm text-muted-foreground">No recordings yet — press Record above</p>
           </div>
         )}
       </div>

@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 
 /**
  * The meeting recorder, as the app sees it. Two owners again, like autoplay: the
- * Record BUTTON lives in the bottom bar (Layout) and the transcript PANEL is its
- * own page — so the state is a tiny shared store, polled from the server.
+ * Record BUTTON sits at the top of the Recordings page and the transcript PANEL is
+ * its own page — so the state is a tiny shared store, polled from the server.
  *
  * Polled, not pushed: /api/record/status is a cheap local read, and an extra
  * EventSource would eat one of the six localhost:3001 sockets (see serverEvents).
@@ -46,18 +46,18 @@ async function poll() {
   }
 }
 
-export async function startRecording(): Promise<boolean> {
+export async function startRecording(): Promise<number | null> {
   set({ busy: true, error: null });
   try {
     const r = await fetch(`${API}/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
     const body = await r.json();
     // 409 = already recording: not an error, just show it.
-    if (!r.ok && r.status !== 409) { set({ error: body.error || `start failed (${r.status})` }); return false; }
+    if (!r.ok && r.status !== 409) { set({ error: body.error || `start failed (${r.status})` }); return null; }
     await poll();
-    return true;
+    return Number(body.meeting_id) || null;
   } catch (e: any) {
     set({ error: e?.message || "start failed" });
-    return false;
+    return null;
   } finally {
     set({ busy: false });
   }

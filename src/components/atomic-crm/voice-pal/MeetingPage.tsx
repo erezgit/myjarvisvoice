@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChevronLeft, Copy } from "lucide-react";
 import { useRecorder } from "./recorderStore";
+import { RecordButton } from "./RecordButton";
 
 /**
  * The transcript of one recording made on this Mac. Two routes share it:
@@ -116,9 +117,10 @@ export function MeetingPage() {
                 ? "Stopped · transcribing the last pieces"
                 : meeting
                   ? "Stopped"
-                  : "Press the red button to record"}
+                  : "Start one from the Recordings page"}
           </div>
         </div>
+        {isLive && <RecordButton />}
         {sorted.length > 0 && (
           <button
             type="button"
