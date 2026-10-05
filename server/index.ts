@@ -109,7 +109,7 @@ app.use("/api/canvas", express.json({ limit: "2mb" }));
 app.use(express.json());
 
 // Meeting recorder — before the generic /api/:resource routes, which would swallow it.
-registerRecorderRoutes(app);
+registerRecorderRoutes(app, broadcast);
 
 // =====================
 // SSE — push data-change notifications to connected browsers

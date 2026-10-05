@@ -28,9 +28,9 @@ const WHISPER_URL = "http://127.0.0.1:8178";
 const WHISPER_BIN = "/opt/homebrew/bin/whisper-server";
 const WHISPER_MODEL = path.join(os.homedir(), "Library/Application Support/ru.starmel.OpenSuperWhisper/whisper-models/ggml-large-v3-turbo.bin");
 const VAD_MODEL = "/Applications/OpenSuperWhisper.app/Contents/Resources/ggml-silero-v5.1.2.bin";
-// 10 s target, cut at the quietest 100 ms in the 4 s before it — so every chunk
-// ends at a pause between 6 and 10 s (Erez, 6 Oct: "25 seconds is really a lot").
-const CHUNK_SECONDS = "10";
+// The recorder cuts at every pause (one chunk per sentence); this is only the CAP,
+// for someone who talks 12 s without stopping (Erez, 6 Oct: "as fast as whisper can").
+const CHUNK_SECONDS = "12";
 
 let current: { meetingId: number; dir: string } | null = null;
 // The panel keeps showing a meeting after Stop — the transcriber is still
@@ -100,8 +100,35 @@ function adoptRunningRecording() {
   } catch {}
 }
 
-export function registerRecorderRoutes(app: Express) {
+/** A recording's folder on this Mac, by meeting id — null for one made elsewhere. */
+function dirFor(meetingId: number): string | null {
+  if (current?.meetingId === meetingId) return current.dir;
+  try {
+    const name = fs.readdirSync(ROOT).find((n) => n.startsWith(`${meetingId}-`));
+    return name ? path.join(ROOT, name) : null;
+  } catch { return null; }
+}
+
+/** The transcriber's local lines — what the app shows. Read from disk, never from Neon. */
+function localLines(dir: string, after: number) {
+  const file = path.join(dir, "lines.jsonl");
+  if (!fs.existsSync(file)) return null;
+  return fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l))
+    .filter((r) => r.seq > after)
+    .map((r) => ({ id: r.seq, speaker_name: r.speaker_name, is_host: r.is_host, words: r.words, start_ts: r.start_ts, end_ts: r.end_ts, language: r.language }));
+}
+
+// Push, don't poll: when the live recording's lines.jsonl grows, tell the app at once.
+let watched: { dir: string; w: fs.FSWatcher } | null = null;
+function watchLines(dir: string, broadcast: (resource: string) => void) {
+  if (watched?.dir === dir) return;
+  watched?.w.close();
+  watched = { dir, w: fs.watch(dir, (_ev, name) => { if (name === "lines.jsonl") broadcast("recording"); }) };
+}
+
+export function registerRecorderRoutes(app: Express, broadcast: (resource: string) => void = () => {}) {
   adoptRunningRecording();
+  if (current) watchLines(current.dir, broadcast);
   app.post("/api/record/start", async (req, res) => {
     if (current && alive(recorderPid(current.dir))) {
       return res.status(409).json({ error: "already recording", meeting_id: current.meetingId, dir: current.dir });
@@ -122,6 +149,7 @@ export function registerRecorderRoutes(app: Express) {
       const meetingId = Number(row.id);
       const dir = path.join(ROOT, `${meetingId}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
       fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "title"), JSON.stringify(title));
 
       // `open -n` makes the recorder its own app, so macOS asks for (and remembers)
       // microphone + system-audio permission for IT, not for this node process.
@@ -138,6 +166,7 @@ export function registerRecorderRoutes(app: Express) {
       }
       current = { meetingId, dir };
       lastMeetingId = meetingId;
+      watchLines(dir, broadcast);
       console.log(`[record] started meeting ${meetingId} → ${dir}`);
       res.json({ meeting_id: meetingId, dir, title });
     } catch (e: any) {
@@ -195,6 +224,18 @@ export function registerRecorderRoutes(app: Express) {
         const [latest] = await sql(`SELECT id FROM meetings WHERE bot_id LIKE 'mjv-recorder%' ORDER BY id DESC LIMIT 1`);
         if (!latest) return res.status(404).json({ error: "no recording yet" });
         meetingId = Number(latest.id);
+      }
+      // A recording made on this Mac is served from its own folder — instant, and immune
+      // to Neon. Status comes from the folder too: no `done` file means still recording.
+      const dir = dirFor(meetingId);
+      const local = dir ? localLines(dir, after) : null;
+      if (dir && local) {
+        const done = fs.existsSync(path.join(dir, "done"));
+        const transcribing = done && !alive(recorderPid(dir)) && lineCount(path.join(dir, "chunks.jsonl")) >
+          (() => { try { return JSON.parse(fs.readFileSync(path.join(dir, "transcribed.json"), "utf8")).length; } catch { return 0; } })();
+        let title = `Recording ${meetingId}`;
+        try { title = JSON.parse(fs.readFileSync(path.join(dir, "title"), "utf8")); } catch {}
+        return res.json({ meeting: { id: meetingId, title, status: !done || transcribing ? "recording" : "ended" }, rows: local });
       }
       const [meeting] = await sql(`SELECT id, title, status, started_at, ended_at FROM meetings WHERE id = $1`, [meetingId]);
       if (!meeting) return res.status(404).json({ error: `no meeting ${meetingId}` });

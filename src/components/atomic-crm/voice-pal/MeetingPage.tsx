@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import { ChevronLeft, Copy } from "lucide-react";
 import { useRecorder } from "./recorderStore";
 import { RecordButton } from "./RecordButton";
+import { subscribeServerEvents } from "@/lib/serverEvents";
 
 /**
  * The transcript of one recording made on this Mac. Two routes share it:
@@ -10,8 +11,8 @@ import { RecordButton } from "./RecordButton";
  *   /voice-pal/recordings/:id   — any past recording, opened from the Recordings list
  * Either way it polls, so a recording still being transcribed keeps filling.
  *
- * The transcriber works in 6–10 s chunks per track (mic = Erez, system audio =
- * the others), so lines arrive about 10–15 s behind the speech and the two tracks
+ * The recorder closes a chunk at every pause, one per sentence, per track (mic = Erez, system audio =
+ * the others), so a line arrives a second or two after the sentence ends and the two tracks
  * land out of order — they are sorted by start time here, never by arrival.
  */
 type Row = {
@@ -78,8 +79,11 @@ export function MeetingPage() {
       }
     };
     void load();
-    const t = setInterval(load, 3000);
-    return () => { cancelled = true; clearInterval(t); };
+    // Pushed: the server announces "recording" the moment the transcriber writes a line.
+    // The slow poll is only a backstop in case an event is missed.
+    const off = subscribeServerEvents((resource) => { if (resource === "recording") void load(); });
+    const t = setInterval(load, 10000);
+    return () => { cancelled = true; clearInterval(t); off(); };
   }, [meetingId]);
 
   const sorted = [...rows].sort((a, b) => Number(a.start_ts) - Number(b.start_ts));
@@ -112,7 +116,7 @@ export function MeetingPage() {
           <div className="truncate text-sm font-medium text-foreground">{meeting?.title ?? "Meeting"}</div>
           <div className="text-[11px] text-muted-foreground">
             {isLive
-              ? `Recording · ${rec.transcribed ?? 0} of ${rec.chunks ?? 0} pieces transcribed · about 10–15 s behind`
+              ? `Recording · ${rec.transcribed ?? 0} of ${rec.chunks ?? 0} sentences transcribed · lines appear as each one ends`
               : finishing
                 ? "Stopped · transcribing the last pieces"
                 : meeting
@@ -165,7 +169,7 @@ export function MeetingPage() {
           <div className="py-24 text-center">
             <div className="mb-3 text-4xl">🎙️</div>
             <p className="text-sm text-muted-foreground">
-              {isLive ? "Listening — the first lines appear in about 15 seconds" : "No transcript yet"}
+              {isLive ? "Listening — each line appears when its sentence ends" : "No transcript yet"}
             </p>
           </div>
         )}

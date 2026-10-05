@@ -2,10 +2,16 @@
 //
 //   node recorder/transcriber.mjs <recording-dir> <meeting-id>
 //
-// Reads <dir>/chunks.jsonl as it grows, sends each chunk to the local whisper-server
-// (language auto-detected PER CHUNK, so Hebrew and English switch by themselves), checks
-// the text agrees with the language it claims, and inserts one meeting_transcript row per
-// chunk. When <dir>/done exists and every chunk is written, marks the meeting ended.
+// Reads <dir>/chunks.jsonl as it grows (one chunk per spoken sentence), sends each to the
+// local whisper-server (language detected per phrase), checks the text agrees with the
+// language it claims, and:
+//   1. appends each line to <dir>/lines.jsonl AT ONCE — that is what the app shows, so a
+//      line is on screen about a second after the sentence ends;
+//   2. queues it for Neon, inserted in the background. A Neon failure retries the INSERT,
+//      never the transcription, and never delays the screen (6 Oct: 25 Neon failures per
+//      meeting used to re-run whisper and hold every later line back by up to 30 s).
+// When <dir>/done exists, every chunk is transcribed and the queue is empty, it marks the
+// meeting ended.
 //
 // ⛔ A 200 is not a correct result: whisper can return Hebrew speech as fluent English
 // nonsense. Every result is checked by counting Hebrew letters and redone in the other
@@ -140,6 +146,16 @@ function rmsOf(wav) {
  *  words (107: 0.0022 → "זה לא נכנס..." beside speech at 0.0287); it is dropped and logged. */
 async function transcribe(file) {
   const buf = fs.readFileSync(file);
+  // The recorder cuts at every pause, so a chunk up to its 12 s cap is ONE sentence:
+  // send it whole and skip the separate VAD pass (0.65 s a chunk, measured 6 Oct). The
+  // whisper-server runs its own VAD, and the language is still detected on this chunk.
+  const seconds = (buf.length - HEADER) / 2 / SR;
+  if (seconds <= 12.5) {
+    const r = await transcribePhrase(buf);
+    const segs = collapseLoops(r.segments.map((s) => ({ start: s.start, end: s.end, text: (s.text || "").trim() })).filter((s) => s.text));
+    const text = segs.map((s) => s.text).join(" ").trim();
+    return text ? [{ start: segs[0].start, end: segs[segs.length - 1].end, lang: r.lang, redone: r.redone, prob: r.prob, rms: rmsOf(buf), text }] : [];
+  }
   let regions = speechRegions(file);
   if (!regions.length) regions = [{ start: 0, end: (buf.length - HEADER) / 2 / SR }];
   const slices = regions.map((g) => { const s = sliceWav(buf, g.start, g.end); return { ...s, rms: rmsOf(s.wav) }; });
@@ -167,7 +183,48 @@ if (process.env.DRY) {
 const journal = path.join(dir, "chunks.jsonl");
 const doneFile = path.join(dir, "done");
 const progressFile = path.join(dir, "transcribed.json");
+const linesFile = path.join(dir, "lines.jsonl");
 const seen = new Set(fs.existsSync(progressFile) ? JSON.parse(fs.readFileSync(progressFile, "utf8")) : []);
+let seq = fs.existsSync(linesFile) ? fs.readFileSync(linesFile, "utf8").split("\n").filter(Boolean).length : 0;
+
+// ── Neon, in the background ──
+// Rows are queued with the local seq; on restart, lines not yet in Neon are re-queued from
+// lines.jsonl by comparing against what the meeting already holds.
+const queue = [];
+async function requeueUnsent() {
+  if (!seq) return;
+  const [{ n }] = await sql(`SELECT count(*)::int AS n FROM meeting_transcript WHERE meeting_id = $1`, [meetingId]);
+  const lines = fs.readFileSync(linesFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  queue.push(...lines.slice(n));
+  if (lines.length > n) log(`requeued ${lines.length - n} line(s) not yet in Neon`);
+}
+let neonFailures = 0;
+async function flushNeon() {
+  for (;;) {
+    if (queue.length) {
+      const batch = queue.slice(0, 50);
+      const params = [], values = [];
+      for (const r of batch) {
+        const i = params.length;
+        values.push(`($${i + 1}, 'mjv-recorder', $${i + 2}, $${i + 3}, $${i + 4}, $${i + 5}, $${i + 6}, $${i + 7}, 'transcript.data', $${i + 8})`);
+        params.push(meetingId, r.speaker_name, r.track, r.is_host, r.words, r.start_ts, r.end_ts, JSON.stringify(r.raw));
+      }
+      try {
+        await sql(`INSERT INTO meeting_transcript (meeting_id, bot_id, speaker_name, speaker_id, is_host, words, start_ts, end_ts, event_type, raw)
+                   VALUES ${values.join(", ")}`, params);
+        queue.splice(0, batch.length);
+        neonFailures = 0;
+        continue;
+      } catch (e) {
+        neonFailures++;
+        log(`neon insert of ${batch.length} FAILED (${neonFailures}), will retry: ${e.message}`);
+        await new Promise((r) => setTimeout(r, Math.min(10000, 500 * 2 ** neonFailures)));
+        continue;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
 
 async function processChunk(c) {
   const file = path.join(dir, c.file);
@@ -175,20 +232,21 @@ async function processChunk(c) {
   const t0 = Date.now();
   const phrases = await transcribe(file);
   if (!phrases.length) { log(`${c.file} no speech`); return; }
-  // One row per phrase, all in one statement, so a chunk lands whole or not at all.
-  const params = [], values = [];
-  for (const p of phrases) {
-    const i = params.length;
-    values.push(`($${i + 1}, 'mjv-recorder', $${i + 2}, $${i + 3}, $${i + 4}, $${i + 5}, $${i + 6}, $${i + 7}, 'transcript.data', $${i + 8})`);
-    params.push(meetingId, SPEAKER[c.track] || c.track, c.track, c.track === "mic", p.text,
-      +(c.start_s + p.start).toFixed(2), +(c.start_s + p.end).toFixed(2),
-      JSON.stringify({ language: p.lang, detected_prob: p.prob, redone: p.redone, rms: p.rms, chunk: c.file, source: "mjv-recorder" }));
-  }
-  await sql(`INSERT INTO meeting_transcript (meeting_id, bot_id, speaker_name, speaker_id, is_host, words, start_ts, end_ts, event_type, raw)
-             VALUES ${values.join(", ")}`, params);
+  const rows = phrases.map((p) => ({
+    seq: ++seq, track: c.track, speaker_name: SPEAKER[c.track] || c.track, is_host: c.track === "mic",
+    words: p.text, start_ts: +(c.start_s + p.start).toFixed(2), end_ts: +(c.start_s + p.end).toFixed(2), language: p.lang,
+    raw: { language: p.lang, detected_prob: p.prob, redone: p.redone, rms: p.rms, chunk: c.file, source: "mjv-recorder" },
+  }));
+  // On screen first: one append, the server sees the file change and pushes it to the app.
+  fs.appendFileSync(linesFile, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  queue.push(...rows);
+  const lag = c.wall ? ((Date.now() / 1000 - c.wall)).toFixed(1) : "?";
   for (const p of phrases) log(`${c.file} ${p.lang}${p.redone ? " (redone)" : ""} → ${p.text.slice(0, 80)}`);
-  log(`${c.file} ${phrases.length} phrase(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  log(`${c.file} ${c.dur_s?.toFixed?.(1) ?? "?"}s audio, ${phrases.length} phrase(s) in ${((Date.now() - t0) / 1000).toFixed(1)}s, on screen ${lag}s after the cut`);
 }
+
+await requeueUnsent().catch((e) => log(`requeue check failed: ${e.message}`));
+flushNeon();
 
 let failures = 0;
 for (;;) {
@@ -202,6 +260,7 @@ for (;;) {
       fs.writeFileSync(progressFile, JSON.stringify([...seen]));
       failures = 0;
     } catch (e) {
+      // Only whisper can fail here now — Neon is the queue's problem.
       failures++;
       log(`${c.file} FAILED (${failures}): ${e.message}`);
       await new Promise((r) => setTimeout(r, Math.min(30000, 2000 * failures)));
@@ -209,10 +268,13 @@ for (;;) {
     }
   }
   const allDone = fs.existsSync(doneFile) && lines.every((l) => seen.has(JSON.parse(l).file));
-  if (allDone) {
-    await sql(`UPDATE meetings SET status = 'ended', ended_at = now() WHERE id = $1`, [meetingId]);
-    log(`meeting ${meetingId} ended — ${seen.size} chunks`);
+  if (allDone && !queue.length) {
+    for (let i = 1; ; i++) {
+      try { await sql(`UPDATE meetings SET status = 'ended', ended_at = now() WHERE id = $1`, [meetingId]); break; }
+      catch (e) { log(`marking ended FAILED (${i}): ${e.message}`); await new Promise((r) => setTimeout(r, Math.min(10000, 1000 * i))); }
+    }
+    log(`meeting ${meetingId} ended — ${seen.size} chunks, ${seq} lines`);
     process.exit(0);
   }
-  await new Promise((r) => setTimeout(r, 1000));
+  await new Promise((r) => setTimeout(r, 150));
 }

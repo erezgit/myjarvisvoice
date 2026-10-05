@@ -5,10 +5,14 @@
 //            — Teams, Meet in Chrome, Zoom alike; the output device does not matter,
 //            so speakers, AirPods and wired earphones all work.
 //
-// Usage:  meeting-recorder <out-dir> [chunk-seconds=20]
+// Usage:  meeting-recorder <out-dir> [max-chunk-seconds=12]
 //
-// Writes 16 kHz mono 16-bit WAV chunks, cut at the quietest moment near the chunk
-// length so a word is not split, and appends one JSON line per chunk to
+// Writes 16 kHz mono 16-bit WAV chunks, ONE PER SPOKEN SENTENCE: a chunk closes
+// the moment the speaker pauses (0.5 s of quiet after speech), so a line can be
+// transcribed and shown about a second after it is said (Erez, 6 Oct: "as fast as
+// whisper can do it, but still precise"). Someone who never pauses is cut at the
+// cap, at the quietest 100 ms of its last 4 s. Long silence is dropped, not written.
+// It and appends one JSON line per chunk to
 // <out-dir>/chunks.jsonl AFTER the file is renamed into place — a reader that
 // follows chunks.jsonl never sees a half-written file.
 // SIGINT/SIGTERM flushes both tracks and writes <out-dir>/done.
@@ -24,7 +28,7 @@ guard args.count >= 2 else {
     exit(2)
 }
 let outDir = URL(fileURLWithPath: args[1])
-let chunkSeconds = args.count >= 3 ? Double(args[2]) ?? 20 : 20
+let chunkSeconds = args.count >= 3 ? Double(args[2]) ?? 12 : 12   // the cap, not the rhythm
 try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 let startedAt = Date()
 let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: SR, channels: 1, interleaved: false)!
@@ -96,8 +100,44 @@ final class Track {
         if out.frameLength > 0, let ch = out.floatChannelData?[0] {
             buf.append(contentsOf: UnsafeBufferPointer(start: ch, count: Int(out.frameLength)))
         }
-        let target = Int(chunkSeconds * SR)
-        if buf.count >= target { cut(at: quietestCut(target: target)) }
+        lastAudio = Date()
+        scan()
+    }
+
+    // ── Pause detection: plain energy on 30 ms frames against an adaptive floor ──
+    let frame = Int(0.03 * SR)
+    var scanned = 0              // samples of buf already classified
+    var floor: Float = 0.002     // running noise floor (rises slowly, falls at once)
+    var heardSpeech = false      // speech since the last cut
+    var silentRun = 0            // samples of quiet since the last speech frame
+    var lastAudio = Date()
+
+    func scan() {
+        while scanned + frame <= buf.count {
+            var sq: Float = 0
+            for j in scanned..<(scanned + frame) { sq += buf[j] * buf[j] }
+            let rms = (sq / Float(frame)).squareRoot()
+            floor = rms < floor ? rms : floor + (rms - floor) * 0.002
+            let speech = rms > max(0.004, floor * 3)
+            scanned += frame
+            if speech { heardSpeech = true; silentRun = 0 } else { silentRun += frame }
+
+            if heardSpeech && silentRun >= Int(0.5 * SR) && scanned >= Int(1.0 * SR) {
+                // The sentence ended: cut 0.25 s into the pause, keeping a little tail.
+                cut(at: scanned - silentRun + Int(0.25 * SR))
+            } else if !heardSpeech && buf.count >= Int(10 * SR) {
+                drop(Int(10 * SR) - Int(1 * SR))     // ten seconds of nothing: discard, keep 1 s lead-in
+            } else if buf.count >= Int(chunkSeconds * SR) {
+                cut(at: quietestCut(target: buf.count))
+            }
+        }
+    }
+
+    /// Advance past audio nobody needs (silence), keeping timestamps true.
+    func drop(_ n: Int) {
+        offset += n
+        buf.removeFirst(n)
+        scanned = max(0, scanned - n)
     }
 
     /// The quietest 100 ms in the last 4 s before the target, so a cut rarely splits a word.
@@ -136,11 +176,14 @@ final class Track {
         } catch { log("\(name): write failed \(error)") }
         offset += n
         buf.removeFirst(n)
+        scanned = max(0, scanned - n)
+        heardSpeech = false
+        silentRun = 0
     }
 
     func flush() {
         lock.lock(); defer { lock.unlock() }
-        if buf.count > Int(0.5 * SR) { cut(at: buf.count) }
+        if heardSpeech && buf.count > Int(0.5 * SR) { cut(at: buf.count) }
     }
 }
 
@@ -210,6 +253,7 @@ func startSystem() -> Bool {
     guard st == noErr, let procID else { log("system: ioproc failed \(st)"); return false }
     st = AudioDeviceStart(aggID, procID)
     guard st == noErr else { log("system: start failed \(st)"); return false }
+    sys.lock.lock(); sys.lastAudio = Date(); sys.lock.unlock()   // the watchdog counts from now
     log("system: started \(tapFormat) via output \(outUID)")
     return true
 }
@@ -218,6 +262,35 @@ func stopSystem() {
     if let procID { AudioDeviceStop(aggID, procID); AudioDeviceDestroyIOProcID(aggID, procID) }
     if aggID != kAudioObjectUnknown { AudioHardwareDestroyAggregateDevice(aggID) }
     if tapID != kAudioObjectUnknown { AudioHardwareDestroyProcessTap(tapID) }
+    procID = nil; aggID = AudioObjectID(kAudioObjectUnknown); tapID = AudioObjectID(kAudioObjectUnknown)
+}
+
+// ⛔ The aggregate device is built on the output device that was current at start.
+// Switch to headphones and that device goes away — the tap stops delivering and the
+// other side vanishes from the transcript (meeting 110, 6 Oct: silent from 9:44 on,
+// while the mic, which already restarted itself, carried on). So: rebuild the tap
+// when the default output changes, and as a backstop whenever it has delivered
+// nothing for 3 s (a running tap delivers silence, never nothing).
+var lastSystemRestart = Date.distantPast
+func restartSystem(_ why: String) {
+    guard Date().timeIntervalSince(lastSystemRestart) > 2 else { return }
+    lastSystemRestart = Date()
+    log("system: \(why) — restarting tap")
+    stopSystem()
+    sys.lock.lock(); sys.lastAudio = Date(); sys.lock.unlock()
+    if !startSystem() { log("system: restart failed — will retry") }
+}
+for sel in [kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDefaultSystemOutputDevice] {
+    var addr = AudioObjectPropertyAddress(mSelector: sel, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, DispatchQueue.main) { _, _ in
+        restartSystem("output device changed")
+    }
+}
+let systemWatchdog = DispatchSource.makeTimerSource(queue: .main)
+systemWatchdog.schedule(deadline: .now() + 5, repeating: 1)
+systemWatchdog.setEventHandler {
+    sys.lock.lock(); let quiet = Date().timeIntervalSince(sys.lastAudio); sys.lock.unlock()
+    if quiet > 3 { restartSystem(String(format: "no audio for %.0f s", quiet)) }
 }
 
 func finish() {
@@ -242,5 +315,6 @@ for s in [SIGINT, SIGTERM] {
 try? JSONSerialization.data(withJSONObject: ["started": startedAt.timeIntervalSince1970, "chunk_s": chunkSeconds, "pid": getpid()])
     .write(to: outDir.appendingPathComponent("started"))
 startMic()
-if !startSystem() { log("system track unavailable — recording mic only") }
+if !startSystem() { log("system track unavailable — the watchdog will keep retrying") }
+systemWatchdog.resume()
 dispatchMain()
