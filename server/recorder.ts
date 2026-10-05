@@ -45,11 +45,24 @@ function dbUrl(): string | null {
 async function sql(query: string, params: unknown[] = []) {
   const url = dbUrl();
   if (!url) throw new Error(`no DATABASE_URL in ${DB_FILE}`);
-  const r = await fetch(`https://${new URL(url).hostname}/sql`, {
-    method: "POST",
-    headers: { "Neon-Connection-String": url, "Content-Type": "application/json" },
-    body: JSON.stringify({ query, params }),
-  });
+  // Neon over HTTP fails intermittently from this Mac with a bare "fetch failed" (25 times
+  // in one meeting, 6 Oct). A network failure never reached the database, so retrying is
+  // safe; an HTTP error answer is NOT retried — that one did reach it.
+  let r: Response | undefined;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      r = await fetch(`https://${new URL(url).hostname}/sql`, {
+        method: "POST",
+        headers: { "Neon-Connection-String": url, "Content-Type": "application/json" },
+        body: JSON.stringify({ query, params }),
+        signal: AbortSignal.timeout(15000),
+      });
+      break;
+    } catch (e) {
+      if (attempt >= 4) throw e;
+      await new Promise((res) => setTimeout(res, 400 * attempt));
+    }
+  }
   const body = await r.text();
   if (!r.ok) throw new Error(`neon ${r.status}: ${body.slice(0, 300)}`);
   return JSON.parse(body).rows as any[];
