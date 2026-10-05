@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Copy } from "lucide-react";
+import { useNavigate, useParams } from "react-router";
+import { ChevronLeft, Copy } from "lucide-react";
 import { useRecorder } from "./recorderStore";
 
 /**
- * The live transcript of a meeting recorded on this Mac. Opened by the Record
- * button in the bottom bar; fills as the transcriber writes rows to Neon.
+ * The transcript of one recording made on this Mac. Two routes share it:
+ *   /voice-pal/meeting          — the CURRENT recording, opened by the Record button
+ *   /voice-pal/recordings/:id   — any past recording, opened from the Recordings list
+ * Either way it polls, so a recording still being transcribed keeps filling.
  *
  * The transcriber works in ~20 s chunks per track (mic = Erez, system audio =
  * the others), so lines arrive about 25 s behind the speech and the two tracks
@@ -30,7 +33,11 @@ function clock(seconds: number) {
 
 export function MeetingPage() {
   const rec = useRecorder();
-  const meetingId = rec.meeting_id ?? rec.last_meeting_id ?? null;
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const meetingId = id ? Number(id) : (rec.meeting_id ?? rec.last_meeting_id ?? null);
+  // The recorder's live state only describes THIS page when it is showing the live recording.
+  const isLive = rec.recording && rec.meeting_id === (meetingId ?? rec.meeting_id);
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -84,18 +91,26 @@ export function MeetingPage() {
   const copyAll = () =>
     navigator.clipboard.writeText(sorted.map((r) => `[${clock(Number(r.start_ts))}] ${r.speaker_name}: ${r.words}`).join("\n"));
 
-  const finishing = !rec.recording && meeting?.status === "recording";
+  const finishing = !isLive && meeting?.status === "recording";
 
   return (
     <div className="flex min-h-full flex-col bg-background">
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
+        <button
+          type="button"
+          title="All recordings"
+          onClick={() => navigate("/voice-pal/recordings")}
+          className="-ml-1.5 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
         <span
-          className={`h-2.5 w-2.5 shrink-0 rounded-full ${rec.recording ? "animate-pulse bg-red-500" : "bg-muted-foreground/40"}`}
+          className={`h-2.5 w-2.5 shrink-0 rounded-full ${isLive ? "animate-pulse bg-red-500" : "bg-muted-foreground/40"}`}
         />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-foreground">{meeting?.title ?? "Meeting"}</div>
           <div className="text-[11px] text-muted-foreground">
-            {rec.recording
+            {isLive
               ? `Recording · ${rec.transcribed ?? 0} of ${rec.chunks ?? 0} pieces transcribed · about 25 s behind`
               : finishing
                 ? "Stopped · transcribing the last pieces"
@@ -148,7 +163,7 @@ export function MeetingPage() {
           <div className="py-24 text-center">
             <div className="mb-3 text-4xl">🎙️</div>
             <p className="text-sm text-muted-foreground">
-              {rec.recording ? "Listening — the first lines appear in about 25 seconds" : "No transcript yet"}
+              {isLive ? "Listening — the first lines appear in about 25 seconds" : "No transcript yet"}
             </p>
           </div>
         )}
@@ -159,3 +174,4 @@ export function MeetingPage() {
 }
 
 MeetingPage.path = "/voice-pal/meeting";
+MeetingPage.detailPath = "/voice-pal/recordings/:id";

@@ -4,6 +4,7 @@
 //   POST /api/record/stop                → { meeting_id, dir }
 //   GET  /api/record/status              → { recording, meeting_id?, chunks, transcribed, last_meeting_id? }
 //   GET  /api/record/transcript?meeting_id=&after=  → { meeting, rows } — the app's live panel
+//   GET  /api/record/list                → [{ id, title, status, started_at, ended_at, lines }] — newest first
 //
 // Agents on the Tailormind box reach these through the same reverse tunnel as
 // /api/voice. Recording = recorder/build/MeetingRecorder.app (mic + system audio,
@@ -81,7 +82,24 @@ function lineCount(file: string): number {
   try { return fs.readFileSync(file, "utf8").split("\n").filter(Boolean).length; } catch { return 0; }
 }
 
+/** After a server restart, find a recording that is still running so Stop and the
+ *  live panel keep working — otherwise the recorder runs on, unreachable. */
+function adoptRunningRecording() {
+  try {
+    for (const name of fs.readdirSync(ROOT)) {
+      const dir = path.join(ROOT, name);
+      const id = Number(name.split("-")[0]);
+      if (!id || fs.existsSync(path.join(dir, "done")) || !alive(recorderPid(dir))) continue;
+      current = { meetingId: id, dir };
+      lastMeetingId = id;
+      console.log(`[record] adopted running recording ${id} → ${dir}`);
+      return;
+    }
+  } catch {}
+}
+
 export function registerRecorderRoutes(app: Express) {
+  adoptRunningRecording();
   app.post("/api/record/start", async (req, res) => {
     if (current && alive(recorderPid(current.dir))) {
       return res.status(409).json({ error: "already recording", meeting_id: current.meetingId, dir: current.dir });
@@ -146,6 +164,21 @@ export function registerRecorderRoutes(app: Express) {
       recording: alive(recorderPid(dir)), meeting_id: meetingId, dir,
       chunks: lineCount(path.join(dir, "chunks.jsonl")), transcribed, last_meeting_id: lastMeetingId,
     });
+  });
+
+  // Every recording made on this Mac, newest first — the app's Recordings page.
+  app.get("/api/record/list", async (_req, res) => {
+    try {
+      const rows = await sql(
+        `SELECT m.id, m.title, m.status, m.started_at, m.ended_at, count(t.id)::int AS lines
+           FROM meetings m LEFT JOIN meeting_transcript t ON t.meeting_id = m.id
+          WHERE m.bot_id LIKE 'mjv-recorder%'
+          GROUP BY m.id ORDER BY m.id DESC LIMIT 500`,
+      );
+      res.json(rows);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // Rows the transcriber has written, newer than `after` (a meeting_transcript id).

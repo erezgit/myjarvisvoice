@@ -1,6 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Home, Heart, Volume2, VolumeX, Settings as SettingsIcon, Circle, Square } from "lucide-react";
+import { Home, Heart, Volume2, VolumeX, Settings as SettingsIcon, Circle, Square, List } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 import { Notification } from "@/components/admin/notification";
 import { Error } from "@/components/admin/error";
@@ -49,8 +49,8 @@ export const Layout = ({ children }: { children: ReactNode }) => {
 };
 
 /**
- * The only chrome in the app, bottom-right: Record, Home, Autoplay, Likes,
- * Voice settings. The navigation ones toggle — tap to open, tap again to go back to
+ * The only chrome in the app, bottom-right: Record, Recordings, Home,
+ * Autoplay, Likes, Voice settings. The navigation ones toggle — tap to open, tap again to go back to
  * the feed; Autoplay just flips a setting and stays put.
  */
 const BottomBar = () => {
@@ -61,6 +61,7 @@ const BottomBar = () => {
   const onLikes = pathname === "/voice-pal/likes";
   const onVoices = pathname === "/voice-pal/voices";
   const onMeeting = pathname === "/voice-pal/meeting";
+  const onRecordings = pathname.startsWith("/voice-pal/recordings");
   const rec = useRecorder();
   // Record: one click starts recording the meeting and opens its live
   // transcript; while recording, the same button stops it. Not recording and
@@ -100,6 +101,19 @@ const BottomBar = () => {
             {rec.busy ? "Starting…" : "Record"}
           </>
         )}
+      </button>
+      <button
+        type="button"
+        aria-label="Recordings"
+        title="All recordings"
+        onClick={() => go("/voice-pal/recordings", onRecordings)}
+        className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
+          onRecordings
+            ? "border-border bg-muted text-foreground"
+            : "border-border text-muted-foreground hover:bg-muted"
+        }`}
+      >
+        <List className="h-4 w-4" />
       </button>
       <button
         type="button"
