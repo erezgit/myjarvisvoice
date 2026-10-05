@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useStore } from "ra-core";
 
 import { ThemeProviderContext, type Theme } from "./theme-context";
@@ -21,6 +21,26 @@ export function ThemeProvider({
   ...props
 }: ThemeProviderProps) {
   const [theme, setTheme] = useStore<Theme>(storageKey, defaultTheme);
+
+  // EVERY LAUNCH STARTS DARK. Erez-locked 2026-08-06.
+  //
+  // A previous attempt tried to be clever: migrate an inherited "system" to
+  // "dark" once, and respect whatever was stored after that. It did not work,
+  // and the reason it did not work is that I never established what was
+  // actually stored — `defaultTheme` only wins when the store is empty, and I
+  // could not find the app's localStorage on disk to check. Shipping a fix
+  // built on an unverified premise is what wasted the round.
+  //
+  // The requirement is simple and absolute: launch the app, it is dark. So do
+  // exactly that and depend on nothing. This runs once per mount, i.e. once per
+  // launch; toggling within the session still works and is still honoured until
+  // the app is next opened.
+  const forcedRef = useRef(false);
+  useEffect(() => {
+    if (forcedRef.current) return;
+    forcedRef.current = true;
+    if (theme !== "dark") setTheme("dark");
+  }, [theme, setTheme]);
 
   useEffect(() => {
     const root = window.document.documentElement;

@@ -56,20 +56,33 @@ export function SettingsProvider({ children, userId }: SettingsProviderProps) {
       });
   }, [userId, isInitialized]);
 
-  // Apply theme changes to document when settings change
+  // Persist settings. This provider deliberately does NOT touch the document
+  // theme any more.
+  //
+  // It used to, and it was the reason dark mode could not be turned on at all.
+  // The block that lived here read:
+  //
+  //     // ALWAYS remove dark class, never add it - force light mode only
+  //     root.classList.remove("dark");
+  //     root.removeAttribute('data-theme');
+  //     root.style.colorScheme = 'light';
+  //
+  // Two things made that lethal rather than merely redundant. It is mounted
+  // app-wide from Layout.tsx, so it applies everywhere; and it depends on
+  // `isInitialized`, which flips true after an async init — so it re-fired
+  // AFTER ThemeProvider had set the class and quietly won every time. The
+  // symptom was a theme that no upstream change could shift: index.html could
+  // ship class="dark", ThemeProvider could force dark on mount, and the class
+  // was stripped a moment later with nothing added back.
+  //
+  // `ThemeProvider` (components/admin/theme-provider.tsx) is the single owner of
+  // the document theme, and the visible Dark-mode switch in VoiceOptionsPage
+  // already drives it via useTheme(). The `theme` field and `toggleTheme()` on
+  // this context had NO consumer anywhere in the app — they were dead.
+  //
+  // ONE property, ONE writer. That is the whole fix.
   useEffect(() => {
     if (!isInitialized) return;
-
-    const root = window.document.documentElement;
-
-    // ALWAYS remove dark class, never add it - force light mode only
-    root.classList.remove("dark");
-
-    // Also remove any dark mode attributes that might be set
-    root.removeAttribute('data-theme');
-    root.style.colorScheme = 'light';
-
-    // Save non-preview settings to localStorage
     setSettings(settings);
   }, [settings, isInitialized]);
 
