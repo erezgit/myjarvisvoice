@@ -1,6 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Home, Heart, Volume2, VolumeX, Settings as SettingsIcon } from "lucide-react";
+import { Home, Heart, Volume2, VolumeX, Settings as SettingsIcon, Circle, Square } from "lucide-react";
 import { useNavigate, useLocation } from "react-router";
 import { Notification } from "@/components/admin/notification";
 import { Error } from "@/components/admin/error";
@@ -11,6 +11,7 @@ import { useRealtimeRefresh } from "../hooks/useRealtimeRefresh";
 import { SettingsProvider } from "../chat/contexts/SettingsContext";
 import { MemberConfigProvider } from "../contexts/MemberConfigContext";
 import { useAutoplay } from "../voice-pal/autoplayStore";
+import { useRecorder, startRecording, stopRecording } from "../voice-pal/recorderStore";
 
 /**
  * My Jarvis Voice — compact desktop shell (Open Whisper style).
@@ -48,8 +49,8 @@ export const Layout = ({ children }: { children: ReactNode }) => {
 };
 
 /**
- * The only chrome in the app, bottom-right: Home, Autoplay, Likes, Voice
- * settings. The navigation ones toggle — tap to open, tap again to go back to
+ * The only chrome in the app, bottom-right: Record, Home, Autoplay, Likes,
+ * Voice settings. The navigation ones toggle — tap to open, tap again to go back to
  * the feed; Autoplay just flips a setting and stays put.
  */
 const BottomBar = () => {
@@ -59,10 +60,47 @@ const BottomBar = () => {
   const onHome = pathname === "/voice-pal";
   const onLikes = pathname === "/voice-pal/likes";
   const onVoices = pathname === "/voice-pal/voices";
+  const onMeeting = pathname === "/voice-pal/meeting";
+  const rec = useRecorder();
+  // Record: one click starts recording the meeting and opens its live
+  // transcript; while recording, the same button stops it. Not recording and
+  // already on the transcript, it starts a new one.
+  const onRecord = async () => {
+    if (rec.busy) return;
+    if (rec.recording) { await stopRecording(); return; }
+    navigate("/voice-pal/meeting");
+    await startRecording();
+  };
   const go = (target: string, active: boolean) =>
     navigate(active ? "/voice-pal" : target);
   return (
     <div className="shrink-0 flex items-center justify-end gap-2 px-4 py-3">
+      <button
+        type="button"
+        aria-label={rec.recording ? "Stop recording" : "Record meeting"}
+        title={rec.recording ? "Stop recording" : "Record the meeting and show its transcript"}
+        onClick={onRecord}
+        disabled={rec.busy}
+        className={`flex h-9 items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+          rec.recording
+            ? "border-red-500/40 bg-red-500/15 text-red-500"
+            : onMeeting
+              ? "border-red-500/30 bg-red-500/10 text-red-500"
+              : "border-border text-muted-foreground hover:bg-muted"
+        }`}
+      >
+        {rec.recording ? (
+          <>
+            <Square className="h-3.5 w-3.5 fill-current" />
+            Stop
+          </>
+        ) : (
+          <>
+            <Circle className={`h-3.5 w-3.5 ${onMeeting ? "fill-current" : ""} text-red-500`} />
+            {rec.busy ? "Starting…" : "Record"}
+          </>
+        )}
+      </button>
       <button
         type="button"
         aria-label="Home"

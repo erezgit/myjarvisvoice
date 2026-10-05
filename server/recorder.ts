@@ -2,7 +2,8 @@
 //
 //   POST /api/record/start   { title? }  → { meeting_id, dir }
 //   POST /api/record/stop                → { meeting_id, dir }
-//   GET  /api/record/status              → { recording, meeting_id?, chunks, transcribed }
+//   GET  /api/record/status              → { recording, meeting_id?, chunks, transcribed, last_meeting_id? }
+//   GET  /api/record/transcript?meeting_id=&after=  → { meeting, rows } — the app's live panel
 //
 // Agents on the Tailormind box reach these through the same reverse tunnel as
 // /api/voice. Recording = recorder/build/MeetingRecorder.app (mic + system audio,
@@ -29,6 +30,9 @@ const VAD_MODEL = "/Applications/OpenSuperWhisper.app/Contents/Resources/ggml-si
 const CHUNK_SECONDS = "20";
 
 let current: { meetingId: number; dir: string } | null = null;
+// The panel keeps showing a meeting after Stop — the transcriber is still
+// finishing its last chunks then — so remember which one it was.
+let lastMeetingId: number | null = null;
 
 function dbUrl(): string | null {
   if (!fs.existsSync(DB_FILE)) return null;
@@ -113,6 +117,7 @@ export function registerRecorderRoutes(app: Express) {
         return res.status(500).json({ error: "recorder did not start", meeting_id: meetingId, dir });
       }
       current = { meetingId, dir };
+      lastMeetingId = meetingId;
       console.log(`[record] started meeting ${meetingId} → ${dir}`);
       res.json({ meeting_id: meetingId, dir, title });
     } catch (e: any) {
@@ -133,13 +138,39 @@ export function registerRecorderRoutes(app: Express) {
   });
 
   app.get("/api/record/status", (_req, res) => {
-    if (!current) return res.json({ recording: false });
+    if (!current) return res.json({ recording: false, last_meeting_id: lastMeetingId });
     const { meetingId, dir } = current;
     let transcribed = 0;
     try { transcribed = JSON.parse(fs.readFileSync(path.join(dir, "transcribed.json"), "utf8")).length; } catch {}
     res.json({
       recording: alive(recorderPid(dir)), meeting_id: meetingId, dir,
-      chunks: lineCount(path.join(dir, "chunks.jsonl")), transcribed,
+      chunks: lineCount(path.join(dir, "chunks.jsonl")), transcribed, last_meeting_id: lastMeetingId,
     });
+  });
+
+  // Rows the transcriber has written, newer than `after` (a meeting_transcript id).
+  // The app polls this while its panel is open; ordering by time is the client's job,
+  // because the two tracks land chunk by chunk, not in speaking order.
+  app.get("/api/record/transcript", async (req, res) => {
+    let meetingId = Number(req.query.meeting_id ?? current?.meetingId ?? lastMeetingId ?? 0);
+    const after = Number(req.query.after ?? 0) || 0;
+    try {
+      // After a server restart nothing is remembered — fall back to the newest recording.
+      if (!Number.isFinite(meetingId) || meetingId <= 0) {
+        const [latest] = await sql(`SELECT id FROM meetings WHERE bot_id LIKE 'mjv-recorder%' ORDER BY id DESC LIMIT 1`);
+        if (!latest) return res.status(404).json({ error: "no recording yet" });
+        meetingId = Number(latest.id);
+      }
+      const [meeting] = await sql(`SELECT id, title, status, started_at, ended_at FROM meetings WHERE id = $1`, [meetingId]);
+      if (!meeting) return res.status(404).json({ error: `no meeting ${meetingId}` });
+      const rows = await sql(
+        `SELECT id, speaker_name, is_host, words, start_ts, end_ts, raw->>'language' AS language
+           FROM meeting_transcript WHERE meeting_id = $1 AND id > $2 ORDER BY id LIMIT 1000`,
+        [meetingId, after],
+      );
+      res.json({ meeting, rows });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 }

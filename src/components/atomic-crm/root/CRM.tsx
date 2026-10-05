@@ -46,6 +46,7 @@ import { KnowledgeBasePage } from "../kb/KnowledgeBasePage";
 import { QALogPage } from "../qa-log/QALogPage";
 import { VoicePalPage } from "../voice-pal/VoicePalPage";
 import { LikesPage } from "../voice-pal/LikesPage";
+import { MeetingPage } from "../voice-pal/MeetingPage";
 import { VoiceOptionsPage } from "../voice-pal/VoiceOptionsPage";
 import { CostAnalyticsPage } from "../voice-pal/CostAnalyticsPage";
 import { LoginPage } from "../voice-pal/LoginPage";
@@ -237,6 +238,7 @@ const DesktopAdmin = (props: CoreAdminProps) => {
         <Route path={VoicePalPage.path} element={<VoicePalPage />} />
 
         <Route path={LikesPage.path} element={<LikesPage />} />
+        <Route path={MeetingPage.path} element={<MeetingPage />} />
         <Route path={VoiceOptionsPage.path} element={<VoiceOptionsPage />} />
         <Route path={CostAnalyticsPage.path} element={<CostAnalyticsPage />} />
         <Route path={InsightsPage.path} element={<InsightsPage />} />
