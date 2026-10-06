@@ -56,7 +56,18 @@ export function MeetingPage() {
       setMeeting(null);
     }
     let cancelled = false;
+    // ONE fetch at a time. A single new line fires several pushes at once (fs.watch
+    // reports one write as several events), and each concurrent fetch used the same
+    // cursor and appended the same lines — 6 Oct, one sentence shown eight times.
+    // A push that lands mid-fetch just asks for one more pass afterwards.
+    let inFlight = false, again = false;
     const load = async () => {
+      if (inFlight) { again = true; return; }
+      inFlight = true;
+      try { await fetchOnce(); } finally { inFlight = false; }
+      if (again && !cancelled) { again = false; void load(); }
+    };
+    const fetchOnce = async () => {
       try {
         const q = meetingId ? `meeting_id=${meetingId}&` : "";
         const r = await fetch(`http://localhost:3001/api/record/transcript?${q}after=${afterRef.current}`);
@@ -70,7 +81,12 @@ export function MeetingPage() {
           afterRef.current = 0;
           setRows(body.rows);
         } else if (body.rows.length) {
-          setRows((prev) => [...prev, ...body.rows]);
+          // Merge by id, never append blindly: a line must not be able to show twice.
+          setRows((prev) => {
+            const seen = new Set(prev.map((r) => Number(r.id)));
+            const fresh = body.rows.filter((r: Row) => !seen.has(Number(r.id)));
+            return fresh.length ? [...prev, ...fresh] : prev;
+          });
         }
         setMeeting(body.meeting);
         if (body.rows.length) afterRef.current = Math.max(afterRef.current, ...body.rows.map((x: Row) => Number(x.id)));
