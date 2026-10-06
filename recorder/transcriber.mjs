@@ -24,6 +24,14 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
+import net from "node:net";
+import dns from "node:dns";
+// ⛔ NETWORK: IPv4 first, and no address race. Erez's Mac runs NordVPN: IPv6 is
+// unreachable through it and a connect takes longer than Node's 250 ms happy-eyeballs
+// attempt, so EVERY fetch (Neon, Cloudflare) died "fetch failed"/ETIMEDOUT while curl
+// worked — 25 Neon failures a meeting, then Record refused outright (6 Oct 2026).
+net.setDefaultAutoSelectFamily(false);
+dns.setDefaultResultOrder("ipv4first");
 
 const [dir, meetingIdArg] = process.argv.slice(2);
 if (!dir || !meetingIdArg) {
