@@ -98,10 +98,30 @@ final class Track {
         }
         if let err { log("\(name): convert error \(err)"); return }
         if out.frameLength > 0, let ch = out.floatChannelData?[0] {
-            buf.append(contentsOf: UnsafeBufferPointer(start: ch, count: Int(out.frameLength)))
+            let n = Int(out.frameLength)
+            var peak: Float = 0, sq: Float = 0
+            for i in 0..<n { let v = ch[i]; peak = max(peak, abs(v)); sq += v * v }
+            buf.append(contentsOf: UnsafeBufferPointer(start: ch, count: n))
+            beatBuffers += 1; beatSq += sq; beatN += n
+            // A live microphone never delivers EXACT zeros — its noise floor does not allow it.
+            // A run of them means the device behind the engine is gone (6 Oct, see restartMic).
+            if peak == 0 { if zeroSince == nil { zeroSince = Date() } } else { zeroSince = nil }
         }
         lastAudio = Date()
         scan()
+    }
+
+    // ── Liveness, read by the watchdog (under `lock`) ──
+    var zeroSince: Date?         // first buffer of the current run of exact digital silence
+    var beatBuffers = 0, beatN = 0
+    var beatSq: Float = 0
+    /// One heartbeat line for the log, then reset the counters.
+    func heartbeat() -> String {
+        lock.lock(); defer { lock.unlock() }
+        let rms = beatN > 0 ? (beatSq / Float(beatN)).squareRoot() : 0
+        let line = String(format: "%@ alive: %d buffers, rms %.4f, %d chunks so far", name, beatBuffers, rms, index)
+        beatBuffers = 0; beatN = 0; beatSq = 0
+        return line
     }
 
     // ── Pause detection: plain energy on 30 ms frames against an adaptive floor ──
@@ -190,19 +210,37 @@ final class Track {
 let mic = Track("mic")
 let sys = Track("system")
 
-// ── mic: AVAudioEngine on the default input; rebuilt when the device changes ──
-let engine = AVAudioEngine()
+// ── mic: AVAudioEngine on the default input ──
+//
+// ⛔ A NEW ENGINE ON EVERY RESTART — never the old one restarted (6 Oct 2026). Recordings
+// 125, 127 and 129 each logged "mic: device changed — restarting" then "mic: started",
+// and NOT ONE mic chunk after it, for 5 to 8 minutes while Erez kept talking: the reused
+// engine reports started and its tap never fires again once the input device has changed
+// (his BC-80 headset coming and going). So the engine is thrown away and rebuilt, and the
+// watchdog below rebuilds it too whenever audio stops arriving or arrives as pure zeros.
+var engine = AVAudioEngine()
+var micObserver: NSObjectProtocol?
 func startMic() {
+    if let o = micObserver { NotificationCenter.default.removeObserver(o) }
+    engine.inputNode.removeTap(onBus: 0)
+    engine.stop()
+    engine = AVAudioEngine()
     let input = engine.inputNode
-    input.removeTap(onBus: 0)
     let fmt = input.outputFormat(forBus: 0)
-    guard fmt.sampleRate > 0 else { log("mic: no input device"); return }
+    guard fmt.sampleRate > 0 else { log("mic: no input device — the watchdog will retry"); return }
     input.installTap(onBus: 0, bufferSize: 4096, format: fmt) { b, _ in mic.append(b) }
-    do { try engine.start(); log("mic: started \(fmt)") } catch { log("mic: start failed \(error)") }
+    do { try engine.start(); log("mic: started \(fmt)") } catch { log("mic: start failed \(error) — the watchdog will retry") }
+    micObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { _ in
+        restartMic("device changed")
+    }
 }
-NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { _ in
-    log("mic: device changed — restarting")
-    engine.stop(); startMic()
+var lastMicRestart = Date.distantPast
+func restartMic(_ why: String) {
+    guard Date().timeIntervalSince(lastMicRestart) > 2 else { return }
+    lastMicRestart = Date()
+    log("mic: \(why) — rebuilding the engine")
+    mic.lock.lock(); mic.lastAudio = Date(); mic.zeroSince = nil; mic.lock.unlock()
+    startMic()
 }
 
 // ── system: a global process tap wrapped in a private aggregate device ──
@@ -288,9 +326,19 @@ for sel in [kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDef
 }
 let systemWatchdog = DispatchSource.makeTimerSource(queue: .main)
 systemWatchdog.schedule(deadline: .now() + 5, repeating: 1)
+var lastBeat = Date()
 systemWatchdog.setEventHandler {
     sys.lock.lock(); let quiet = Date().timeIntervalSince(sys.lastAudio); sys.lock.unlock()
     if quiet > 3 { restartSystem(String(format: "no audio for %.0f s", quiet)) }
+    // The mic, by the same rule — plus exact digital silence, which a working mic never makes.
+    mic.lock.lock()
+    let micQuiet = Date().timeIntervalSince(mic.lastAudio)
+    let micZero = mic.zeroSince.map { Date().timeIntervalSince($0) } ?? 0
+    mic.lock.unlock()
+    if micQuiet > 3 { restartMic(String(format: "no audio for %.0f s", micQuiet)) }
+    else if micZero > 10 { restartMic(String(format: "pure digital silence for %.0f s", micZero)) }
+    // One line a minute per track, so a dead track shows in the log the minute it dies.
+    if Date().timeIntervalSince(lastBeat) >= 60 { lastBeat = Date(); log(mic.heartbeat()); log(sys.heartbeat()) }
 }
 
 func finish() {
@@ -302,6 +350,12 @@ func finish() {
     log("stopped")
     exit(0)
 }
+
+// SIGUSR1 = rebuild the mic engine now (a live repair, and how the rebuild path is tested).
+signal(SIGUSR1, SIG_IGN)
+let usr1 = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
+usr1.setEventHandler { lastMicRestart = .distantPast; restartMic("SIGUSR1") }
+usr1.resume()
 
 var signalSources: [DispatchSourceSignal] = []
 for s in [SIGINT, SIGTERM] {
