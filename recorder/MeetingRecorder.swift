@@ -20,6 +20,7 @@
 import AVFoundation
 import CoreAudio
 import Foundation
+import IOKit.pwr_mgt
 
 let SR: Double = 16_000
 let args = CommandLine.arguments
@@ -220,7 +221,15 @@ let sys = Track("system")
 // watchdog below rebuilds it too whenever audio stops arriving or arrives as pure zeros.
 var engine = AVAudioEngine()
 var micObserver: NSObjectProtocol?
-func startMic() {
+// ⛔ THE MIC IS SET UP ON ITS OWN QUEUE, NEVER THE MAIN ONE (7 Oct 2026). `engine.inputNode`
+// can block inside coreaudiod indefinitely (sampled: a rebuilt binary waiting on a microphone
+// permission check while the screen was locked). On the main queue that froze the watchdog,
+// the log AND the SIGTERM handler — Stop could not stop it, and it held the Mac awake forever.
+// On its own queue, a stuck mic is just a mic the watchdog reports; Stop always works.
+let micQueue = DispatchQueue(label: "recorder.mic")
+let sysQueue = DispatchQueue(label: "recorder.system")
+func startMic() { micQueue.async { startMicNow() } }
+func startMicNow() {
     if let o = micObserver { NotificationCenter.default.removeObserver(o) }
     engine.inputNode.removeTap(onBus: 0)
     engine.stop()
@@ -314,9 +323,12 @@ func restartSystem(_ why: String) {
     guard Date().timeIntervalSince(lastSystemRestart) > 2 else { return }
     lastSystemRestart = Date()
     log("system: \(why) — restarting tap")
-    stopSystem()
     sys.lock.lock(); sys.lastAudio = Date(); sys.lock.unlock()
-    if !startSystem() { log("system: restart failed — will retry") }
+    // Off the main queue, like the mic: creating a process tap can block in coreaudiod.
+    sysQueue.async {
+        stopSystem()
+        if !startSystem() { log("system: restart failed — will retry") }
+    }
 }
 for sel in [kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDefaultSystemOutputDevice] {
     var addr = AudioObjectPropertyAddress(mSelector: sel, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
@@ -327,7 +339,12 @@ for sel in [kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDef
 let systemWatchdog = DispatchSource.makeTimerSource(queue: .main)
 systemWatchdog.schedule(deadline: .now() + 5, repeating: 1)
 var lastBeat = Date()
+var lastTick = Date()
 systemWatchdog.setEventHandler {
+    // A watchdog tick that arrives long after the last one means the whole process was frozen:
+    // the Mac slept (recording 132, 7 Oct: lid closed 03:21:52 UTC, 15 min with nothing recorded).
+    let gap = Date().timeIntervalSince(lastTick); lastTick = Date()
+    if gap > 10 { log(String(format: "⛔ GAP: the Mac was asleep (or the recorder frozen) for %.0f s (%.1f min) — NOTHING was recorded in that time", gap, gap / 60)) }
     sys.lock.lock(); let quiet = Date().timeIntervalSince(sys.lastAudio); sys.lock.unlock()
     if quiet > 3 { restartSystem(String(format: "no audio for %.0f s", quiet)) }
     // The mic, by the same rule — plus exact digital silence, which a working mic never makes.
@@ -342,8 +359,10 @@ systemWatchdog.setEventHandler {
 }
 
 func finish() {
-    engine.stop()
-    stopSystem()
+    // ⛔ STOP NEVER TOUCHES AN AUDIO DEVICE. Stopping the engine or the tap waits on coreaudiod,
+    // and that is exactly what can be stuck (7 Oct: a hung mic setup made Stop hang forever).
+    // Flush what we have, write `done`, exit — the kernel releases the devices and the
+    // power assertion. Runs on its own queue, so a blocked main queue cannot block it either.
     mic.flush(); sys.flush()
     let meta: [String: Any] = ["started": startedAt.timeIntervalSince1970, "ended": Date().timeIntervalSince1970]
     try? JSONSerialization.data(withJSONObject: meta).write(to: outDir.appendingPathComponent("done"))
@@ -357,10 +376,11 @@ let usr1 = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
 usr1.setEventHandler { lastMicRestart = .distantPast; restartMic("SIGUSR1") }
 usr1.resume()
 
+let stopQueue = DispatchQueue(label: "recorder.stop")
 var signalSources: [DispatchSourceSignal] = []
 for s in [SIGINT, SIGTERM] {
     signal(s, SIG_IGN)
-    let src = DispatchSource.makeSignalSource(signal: s, queue: .main)
+    let src = DispatchSource.makeSignalSource(signal: s, queue: stopQueue)
     src.setEventHandler { finish() }
     src.resume()
     signalSources.append(src)
@@ -368,7 +388,16 @@ for s in [SIGINT, SIGTERM] {
 
 try? JSONSerialization.data(withJSONObject: ["started": startedAt.timeIntervalSince1970, "chunk_s": chunkSeconds, "pid": getpid()])
     .write(to: outDir.appendingPathComponent("started"))
+// ⛔ KEEP THE MAC AWAKE WHILE RECORDING (7 Oct 2026). Recording 132 "stopped" for 15 minutes
+// because the lid closed and the Mac slept: every process froze. PreventSystemSleep keeps it
+// awake, lid closed included, ON MAINS POWER; on battery macOS sleeps on lid-close regardless
+// (no app can stop that), and the GAP line above says so in the log. Released when we exit.
+var sleepAssertion = IOPMAssertionID(0)
+let asserted = IOPMAssertionCreateWithName(kIOPMAssertionTypePreventSystemSleep as CFString,
+    IOPMAssertionLevel(kIOPMAssertionLevelOn), "Tailormind Desktop is recording a meeting" as CFString, &sleepAssertion)
+log(asserted == kIOReturnSuccess ? "power: holding the Mac awake while recording (works on mains power, lid closed included)" : "power: could NOT hold the Mac awake (\(asserted))")
+
 startMic()
-if !startSystem() { log("system track unavailable — the watchdog will keep retrying") }
+sysQueue.async { if !startSystem() { log("system track unavailable — the watchdog will keep retrying") } }
 systemWatchdog.resume()
 dispatchMain()
